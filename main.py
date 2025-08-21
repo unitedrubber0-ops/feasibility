@@ -41,6 +41,17 @@ CORS(app, resources={r"/*": {"origins": [
 
 
 # --- Helper Functions for File Parsing ---
+def extract_text_from_pdf_paginated(file_stream):
+    """Reads a PDF file stream and returns a list of text content, one string per page."""
+    try:
+        pdf_reader = PyPDF2.PdfReader(file_stream)
+        pages_text = []
+        for page in pdf_reader.pages:
+            pages_text.append(page.extract_text() or "")
+        return pages_text
+    except Exception as e:
+        print(f"Error reading PDF paginated: {e}")
+        return None
 
 def extract_text_from_pdf(file_stream):
     """Reads a PDF file stream and returns its text content."""
@@ -144,7 +155,7 @@ def generate_report_handler():
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
-        
+
         generation_config = genai.GenerationConfig(
             max_output_tokens=8192,
             temperature=0.2 # Adding a low temperature for more predictable JSON output
