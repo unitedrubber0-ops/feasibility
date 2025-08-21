@@ -1,0 +1,6 @@
+Flask
+Flask-Cors
+PyPDF2
+python-docx
+google-generativeai
+gunicorn  # Production web server
