@@ -34,7 +34,10 @@ if GEMINI_API_KEY:
 app = Flask(__name__)
 
 # This CORS setup allows the frontend to communicate with this backend server.
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": [
+    "https://feasibility-1.onrender.com", 
+    "http://127.0.0.1:5001"
+]}})
 
 
 # --- Helper Functions for File Parsing ---
