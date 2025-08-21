@@ -181,5 +181,56 @@ def export_docx_handler():
         print(f"Error creating DOCX file: {e}")
         return jsonify({"error": "Failed to create DOCX file"}), 500
 
+# In main.py, add this new endpoint
+
+@app.route('/get-value-at-point', methods=['POST'])
+def get_value_at_point_handler():
+    # In a real application, you'd get the cached OCR data.
+    # For now, we'll just re-process the source file each time.
+    if 'sourceFile' not in request.files or 'clickedWord' not in request.form:
+        return jsonify({"error": "Missing source file or clicked word"}), 400
+
+    source_file = request.files['sourceFile']
+    clicked_word = request.form['clickedWord'] # In a real app, this would be derived from coordinates
+
+    try:
+        source_stream = io.BytesIO(source_file.read())
+        # In a real app, you would use a library that gives you text WITH coordinates.
+        # For this example, we'll use the full text.
+        source_text = extract_text_from_docx(source_stream) if source_file.filename.endswith('.docx') else extract_text_from_pdf(io.BytesIO(source_file.read()))
+
+        if not source_text:
+            return jsonify({"error": "Could not extract text from source file."}), 500
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to process file: {e}"}), 500
+
+    try:
+        # Initialize your model as before...
+        model = genai.GenerativeModel("gemini-2.5-pro", safety_settings=[...])
+
+        # A new, highly-focused prompt
+        prompt = f"""
+        You are a data extraction specialist. In the following DOCUMENT TEXT, find the label "{clicked_word}" and return its corresponding value.
+
+        **DOCUMENT TEXT:**
+        ---
+        {source_text}
+        ---
+
+        **INSTRUCTIONS:**
+        Return a single, raw JSON object with two keys: "parameter" and "value".
+        - "parameter" should be the exact label that was found (e.g., "HOSE_ID").
+        - "value" should be the numerical or text value associated with that label (e.g., "24.6").
+        """
+
+        response_text = generate_with_retry(model, prompt)
+        response_json = json.loads(response_text)
+        
+        return jsonify(response_json)
+
+    except Exception as e:
+        return jsonify({"error": f"AI processing failed: {e}"}), 500
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
