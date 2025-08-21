@@ -1,4 +1,4 @@
-# main.py - FINAL SIMPLIFIED VERSION
+# main.py - FINAL UNIVERSAL PARSER
 
 import os
 import io
@@ -13,7 +13,6 @@ from flask_cors import CORS
 
 # --- Helper function to extract text page by page ---
 def extract_text_from_pdf_paginated(file_stream):
-    """Reads a PDF file stream and returns a list of text content, one string per page."""
     try:
         pdf_reader = PyPDF2.PdfReader(file_stream)
         pages_text = []
@@ -24,9 +23,8 @@ def extract_text_from_pdf_paginated(file_stream):
         print(f"Error reading PDF paginated: {e}")
         return None
 
-# --- Existing helper functions (no changes needed) ---
+# --- Existing helper functions ---
 def extract_text_from_docx(file_stream):
-    """Reads a DOCX file stream and returns its text content."""
     try:
         document = docx.Document(file_stream)
         return "\n".join([para.text for para in document.paragraphs])
@@ -35,7 +33,6 @@ def extract_text_from_docx(file_stream):
         return None
 
 def generate_with_retry(model, prompt, max_retries=3, retry_delay=5):
-    """Calls the Gemini API with a given prompt and handles retries."""
     for attempt in range(max_retries):
         try:
             response = model.generate_content(prompt)
@@ -61,9 +58,6 @@ if GEMINI_API_KEY:
 # --- Main API Endpoint ---
 @app.route('/generate-report', methods=['POST'])
 def generate_report_handler():
-    """
-    Handles the report generation by parsing the source file page-by-page.
-    """
     print("Received request to /generate-report")
     if 'sourceFile' not in request.files:
         return jsonify({"error": "Source file is missing"}), 400
@@ -96,14 +90,12 @@ def generate_report_handler():
         generation_config = genai.GenerationConfig(max_output_tokens=8192, temperature=0.1)
         model = genai.GenerativeModel("gemini-2.5-pro", generation_config=generation_config, safety_settings=safety_settings)
 
-        # --- This function is now the final step ---
-        # It aggregates data from all pages into a single structured object.
         aggregated_header = {}
         aggregated_rows = []
         table_columns = None
 
         prompt_extract_template = """
-        You are an expert data extraction assistant. Analyze the DOCUMENT PAGE text and extract its header and table data into a JSON format.
+        You are an expert data extraction assistant. Analyze the DOCUMENT PAGE text and extract all header and table data into a JSON format.
 
         **DOCUMENT PAGE:**
         ---
@@ -112,10 +104,10 @@ def generate_report_handler():
 
         **INSTRUCTIONS:**
         1. Return a single raw JSON object with "header" and "table" keys.
-        2. If this page contains header-like data (e.g., Customer Name, Report Number), put it in the "header" object.
-        3. If this page contains a table or part of a table, put its data in the "table" object, which must have "columns" and "rows".
-        4. If no table is present on this page, return an empty list for "rows".
-        5. The "rows" should accurately reflect the structure on the page. If one item spans multiple lines (like 'Thickness'), combine them into a single logical row in the JSON.
+        2. The "header" should be a JSON object of all key-value pairs found at the top of the document.
+        3. The "table" object must have "columns" (a list of headers) and "rows" (a list of lists).
+        4. If no table is on this page, return an empty list for "rows".
+        5. If the document is a simple key-value table, treat the keys as the 'header' and the table itself as the 'table'.
         """
 
         for i, page_text in enumerate(source_pages):
@@ -132,14 +124,12 @@ def generate_report_handler():
                 aggregated_header.update(page_json["header"])
             
             if page_json.get("table") and page_json["table"].get("rows"):
-                # Capture the column headers from the first page that has them
                 if table_columns is None and page_json["table"].get("columns"):
                     table_columns = page_json["table"]["columns"]
                 aggregated_rows.extend(page_json["table"]["rows"])
         
         if table_columns is None: table_columns = []
         
-        # Combine all extracted data into the final result
         final_report_json = {"header": aggregated_header, "table": {"columns": table_columns, "rows": aggregated_rows}}
         print("AI extraction complete for all pages. Sending final report.")
 
@@ -152,9 +142,6 @@ def generate_report_handler():
 # --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])
 def export_docx_handler():
-    """
-    Receives report data in JSON format and returns a DOCX file.
-    """
     data = request.get_json()
     try:
         document = docx.Document()
