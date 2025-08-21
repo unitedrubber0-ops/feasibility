@@ -138,7 +138,13 @@ def generate_report_handler():
     try:
         if not GEMINI_API_KEY:
              return jsonify({"error": "Gemini API key is not configured on the server."}), 500
-
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
         generation_config = genai.GenerationConfig(
             max_output_tokens=8192,
             temperature=0.2 # Adding a low temperature for more predictable JSON output
@@ -148,7 +154,7 @@ def generate_report_handler():
             "gemini-2.5-pro",
             generation_config=generation_config
         )
-        
+
         # --- STEP 1: THE EXTRACTOR ---
         # First, extract structured data from the source document.
         prompt_extract = f"""
