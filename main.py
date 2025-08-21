@@ -71,6 +71,8 @@ def index():
     """A simple route to confirm the server is running."""
     return "The backend server is running. Please use the frontend to upload files."
 
+# In main.py
+
 @app.route('/generate-report', methods=['POST'])
 def generate_report_handler():
     """
@@ -78,6 +80,7 @@ def generate_report_handler():
     """
     print("Received request to /generate-report")
 
+    # This part remains the same, as file handling is correct.
     if 'templateFile' not in request.files or 'sourceFile' not in request.files:
         return jsonify({"error": "Missing template or source file"}), 400
 
@@ -95,11 +98,13 @@ def generate_report_handler():
 
         if source_file.filename.endswith('.pdf'):
             source_text = extract_text_from_pdf(source_stream)
+        elif source_file.filename.endswith('.docx'):
+            source_text = extract_text_from_docx(source_stream)
         else:
             source_text = source_stream.read().decode('utf-8', errors='ignore')
 
-        if not template_text or not source_text:
-            return jsonify({"error": "Could not extract text from one or both files."}), 500
+        if not source_text: # We only truly need the source text now
+            return jsonify({"error": "Could not extract text from the source file."}), 500
 
     except Exception as e:
         print(f"An error occurred during file processing: {e}")
@@ -109,30 +114,30 @@ def generate_report_handler():
         if not GEMINI_API_KEY:
              return jsonify({"error": "Gemini API key is not configured on the server."}), 500
 
-        model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+        ### CHANGE 1: UPGRADED AI MODEL ###
+        # Using a more powerful model for better accuracy on complex documents.
+        model = genai.GenerativeModel("gemini-2.5-pro")
 
+        ### CHANGE 2: NEW, MORE FLEXIBLE PROMPT ###
+        # This prompt analyzes the source document directly, ignoring the template.
+        # This makes it a universal document parser.
         prompt = f"""
-        You are an expert data extraction assistant. Your task is to analyze two documents: a template and a source document with data.
-        You must extract the relevant information from the source document and structure it exactly according to the template.
+        You are an expert data extraction assistant. Your task is to analyze the SOURCE DOCUMENT and convert its contents into a structured JSON object.
 
-        **TEMPLATE DOCUMENT:**
-        ---
-        {template_text}
-        ---
-
-        **SOURCE DOCUMENT (with data):**
+        **SOURCE DOCUMENT:**
         ---
         {source_text}
         ---
 
         **INSTRUCTIONS:**
-        1.  Return the result as a single, raw JSON object with two keys: "header" and "table". Do not wrap the JSON in markdown backticks.
-            - The "header" key should contain an object of key-value pairs based on the template's header.
-            - The "table" key should contain an object with "columns" (a list of strings) and "rows" (a list of lists) based on the template's table.
-        2.  For any columns like 'Observed values', leave the value as an empty string.
+        1.  Analyze the source document to identify the main header information and the primary data table.
+        2.  Return the result as a single, raw JSON object with two keys: "header" and "table". Do not wrap the JSON in markdown backticks.
+        3.  The "header" key should contain an object of key-value pairs based on the information at the top of the source document (e.g., Customer name, Part Number, Date).
+        4.  The "table" key should contain an object with "columns" (a list of strings representing the table headers) and "rows" (a list of lists representing the data in each row).
+        5.  If any table cells appear to be for user input (like empty measurement boxes), represent them as empty strings in the JSON.
         """
 
-        # --- REAL API CALL WITH RETRY LOGIC ---
+        # This part for the API call and retry logic remains the same.
         max_retries = 3
         retry_delay = 15 # seconds
         for attempt in range(max_retries):
@@ -148,15 +153,20 @@ def generate_report_handler():
                 else:
                     raise e # Re-raise the exception on the last attempt
             except Exception as e:
-                raise e # Raise other errors immediately
+                # This will catch JSON parsing errors if the AI returns a bad response
+                print(f"Error processing AI response on attempt {attempt + 1}: {e}")
+                if attempt >= max_retries - 1:
+                    raise e # Re-raise the exception on the last attempt
+                time.sleep(retry_delay)
+
 
     except Exception as e:
         print(f"An error occurred during AI processing: {e}")
         if isinstance(e, google.api_core.exceptions.ResourceExhausted):
             return jsonify({"error": "API rate limit exceeded. Please wait a minute and try again."}), 429
-        return jsonify({"error": "Failed to generate report from AI model"}), 500
-
-
+        # This will now catch errors from both the API call and JSON parsing
+        return jsonify({"error": "Failed to generate report from AI model. The document structure might be too complex or invalid."}), 500
+    
 @app.route('/export-docx', methods=['POST'])
 def export_docx_handler():
     """
