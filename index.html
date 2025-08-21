@@ -50,14 +50,14 @@
 
                 <!-- Source Data File Upload -->
                 <div id="source-drop-area" class="file-drop-area border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-white shadow-sm">
-                    <input type="file" id="source-file-input" class="hidden" accept=".pdf,.txt,.md">
+                    <input type="file" id="source-file-input" class="hidden" accept=".pdf,.docx,.txt,.md">
                     <label for="source-file-input" class="cursor-pointer">
                         <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
                             <path d="M9 17v-2a4 4 0 014-4h1.5l2.08-2.773a2 2 0 011.664-.897H21.5a2 2 0 011.664.897L25.25 11H27a4 4 0 014 4v2m-18 8v-6a2 2 0 012-2h12a2 2 0 012 2v6m-16 0h16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                         <h3 class="mt-2 text-lg font-semibold text-gray-900">Upload Source Data File</h3>
                         <p class="mt-1 text-sm text-gray-500">Drag & drop or click to upload</p>
-                        <p class="mt-1 text-xs text-gray-500">PDF, TXT, MD</p>
+                        <p class="mt-1 text-xs text-gray-500">PDF, DOCX, TXT, MD</p>
                         <p id="source-file-name" class="mt-4 text-sm font-medium text-indigo-600"></p>
                     </label>
                 </div>
@@ -74,7 +74,6 @@
             <div id="results-section" class="mt-16 hidden">
                 <div class="flex justify-between items-center mb-8">
                     <h2 class="text-3xl font-bold text-gray-900">Generated Report</h2>
-                    <!-- NEW: Download Button -->
                     <button id="download-btn" class="hidden bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-300">
                         Download .docx
                     </button>
@@ -113,9 +112,6 @@
     </div>
 
     <script>
-        // --- CONFIGURATION ---
-        // Set the base URL of your deployed backend function.
-        // Using 127.0.0.1 (localhost) is the most reliable way for local development.
         const backendUrlBase = 'https://feasibility-638d.onrender.com';
 
         // File input elements
@@ -137,38 +133,27 @@
 
         let templateFile = null;
         let sourceFile = null;
-        let currentReportData = null; // Store the report data globally
+        let currentReportData = null;
 
-        // --- Drag and Drop Logic ---
         function setupDragAndDrop(dropArea, fileInput, fileNameDisplay, fileStore) {
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropArea.addEventListener(eventName, preventDefaults, false);
+                dropArea.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
             });
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
             ['dragenter', 'dragover'].forEach(eventName => {
                 dropArea.addEventListener(eventName, () => dropArea.classList.add('dragover'), false);
             });
-
             ['dragleave', 'drop'].forEach(eventName => {
                 dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragover'), false);
             });
-
             dropArea.addEventListener('drop', (e) => {
-                const dt = e.dataTransfer;
-                const files = dt.files;
+                const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     fileInput.files = files;
-                    handleFileChange(fileInput, fileNameDisplay, fileStore);
+                    handleFileChange(fileInput, fileNameDisplay, (file) => fileStore(file));
                 }
             }, false);
         }
         
-        // --- File Handling Logic ---
         function handleFileChange(input, nameDisplay, fileVariableSetter) {
              if (input.files.length > 0) {
                 const file = input.files[0];
@@ -186,8 +171,6 @@
         setupDragAndDrop(templateDropArea, templateFileInput, templateFileName, (file) => templateFile = file);
         setupDragAndDrop(sourceDropArea, sourceFileInput, sourceFileName, (file) => sourceFile = file);
 
-
-        // --- Main Generate Logic ---
         generateBtn.addEventListener('click', async () => {
             if (!templateFile || !sourceFile) {
                 showError("Please upload both a template and a source file.");
@@ -219,9 +202,9 @@
                 }
 
                 const reportData = await response.json();
-                currentReportData = reportData; // Save data for download
+                currentReportData = reportData;
                 displayResults(reportData);
-                downloadBtn.classList.remove('hidden'); // Show download button
+                downloadBtn.classList.remove('hidden');
 
             } catch (error) {
                 console.error("Error generating report:", error);
@@ -232,7 +215,6 @@
             }
         });
 
-        // --- NEW: Download Logic ---
         downloadBtn.addEventListener('click', async () => {
             if (!currentReportData) {
                 showError("No report data available to download.");
@@ -245,9 +227,7 @@
             try {
                 const response = await fetch(`${backendUrlBase}/export-docx`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(currentReportData),
                 });
 
@@ -256,7 +236,6 @@
                     throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
                 }
 
-                // Trigger browser download
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -277,42 +256,59 @@
             }
         });
 
-
+        // --- THIS IS THE CORRECTED, ROBUST FUNCTION ---
         function displayResults(data) {
+            // --- Header Section (with safety check) ---
             reportHeader.innerHTML = '';
-            for (const [key, value] of Object.entries(data.header)) {
-                const div = document.createElement('div');
-                div.innerHTML = `<p class="text-sm font-medium text-gray-500">${key}</p><p class="text-lg font-semibold text-gray-900">${value}</p>`;
-                reportHeader.appendChild(div);
+            // Check if the 'header' key exists and is an object
+            if (data.header && typeof data.header === 'object') {
+                for (const [key, value] of Object.entries(data.header)) {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<p class="text-sm font-medium text-gray-500">${key}</p><p class="text-lg font-semibold text-gray-900">${value}</p>`;
+                    reportHeader.appendChild(div);
+                }
             }
 
+            // --- Table Section (with new, robust safety checks) ---
             reportTable.innerHTML = ''; 
-            const thead = document.createElement('thead');
-            thead.className = "bg-gray-100";
-            let tr = document.createElement('tr');
-            data.table.columns.forEach(col => {
-                const th = document.createElement('th');
-                th.scope = "col";
-                th.className = "px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider";
-                th.textContent = col;
-                tr.appendChild(th);
-            });
-            thead.appendChild(tr);
-            reportTable.appendChild(thead);
-
-            const tbody = document.createElement('tbody');
-            tbody.className = "bg-white divide-y divide-gray-200";
-            data.table.rows.forEach(rowData => {
-                tr = document.createElement('tr');
-                rowData.forEach(cellData => {
-                    const td = document.createElement('td');
-                    td.className = "px-6 py-4 text-sm text-gray-700";
-                    td.textContent = cellData;
-                    tr.appendChild(td);
+            // Check if 'table' exists, and if 'columns' and 'rows' exist as arrays
+            if (data.table && Array.isArray(data.table.columns) && Array.isArray(data.table.rows)) {
+                const thead = document.createElement('thead');
+                thead.className = "bg-gray-100";
+                let tr = document.createElement('tr');
+                data.table.columns.forEach(col => {
+                    const th = document.createElement('th');
+                    th.scope = "col";
+                    th.className = "px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider";
+                    th.textContent = col;
+                    tr.appendChild(th);
                 });
-                tbody.appendChild(tr);
-            });
-            reportTable.appendChild(tbody);
+                thead.appendChild(tr);
+                reportTable.appendChild(thead);
+
+                const tbody = document.createElement('tbody');
+                tbody.className = "bg-white divide-y divide-gray-200";
+                data.table.rows.forEach(rowData => {
+                    tr = document.createElement('tr');
+                    // Ensure rowData is an array before trying to loop
+                    if (Array.isArray(rowData)) {
+                        rowData.forEach(cellData => {
+                            const td = document.createElement('td');
+                            td.className = "px-6 py-4 text-sm text-gray-700";
+                            td.textContent = cellData;
+                            tr.appendChild(td);
+                        });
+                    }
+                    tbody.appendChild(tr);
+                });
+                reportTable.appendChild(tbody);
+            } else {
+                // If the table data is missing, show a helpful message
+                console.warn("AI response was missing a valid table structure.");
+                const tbody = document.createElement('tbody');
+                tbody.innerHTML = `<tr><td class="px-6 py-4 text-center text-gray-500" colspan="100%">The AI returned header data but no table data for this document.</td></tr>`;
+                reportTable.appendChild(tbody);
+            }
         }
         
         function showError(message) {
