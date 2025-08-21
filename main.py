@@ -139,8 +139,16 @@ def generate_report_handler():
         if not GEMINI_API_KEY:
              return jsonify({"error": "Gemini API key is not configured on the server."}), 500
 
-        model = genai.GenerativeModel("gemini-2.5-pro")
+        generation_config = genai.GenerationConfig(
+            max_output_tokens=8192,
+            temperature=0.2 # Adding a low temperature for more predictable JSON output
+        )
 
+        model = genai.GenerativeModel(
+            "gemini-2.5-pro",
+            generation_config=generation_config
+        )
+        
         # --- STEP 1: THE EXTRACTOR ---
         # First, extract structured data from the source document.
         prompt_extract = f"""
