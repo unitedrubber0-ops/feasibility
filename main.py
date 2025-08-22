@@ -8,6 +8,7 @@ import PyPDF2
 import docx
 import google.generativeai as genai
 import google.api_core.exceptions
+from google.cloud import vision
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
@@ -176,6 +177,46 @@ def export_docx_handler():
     except Exception as e:
         print(f"Error creating DOCX file: {e}")
         return jsonify({"error": "Failed to create DOCX file"}), 500
+
+@app.route('/process-document-for-ocr', methods=['POST'])
+def process_document_for_ocr_handler():
+    """
+    Processes an uploaded document (PDF or image) using Google Cloud Vision API
+    to extract text and its coordinates.
+    """
+    if 'sourceFile' not in request.files:
+        return jsonify({"error": "Missing source file"}), 400
+
+    source_file = request.files['sourceFile']
+    
+    try:
+        content = source_file.read()
+        image = vision.Image(content=content)
+        
+        client = vision.ImageAnnotatorClient()
+        response = client.document_text_detection(image=image)
+        
+        if response.error.message:
+            raise Exception(f"Google Cloud Vision API error: {response.error.message}")
+
+        words_data = []
+        for page in response.full_text_annotation.pages:
+            for block in page.blocks:
+                for paragraph in block.paragraphs:
+                    for word in paragraph.words:
+                        word_text = "".join([symbol.text for symbol in word.symbols])
+                        vertices = [[v.x, v.y] for v in word.bounding_box.vertices]
+                        words_data.append({
+                            "text": word_text,
+                            "vertices": vertices
+                        })
+
+        return jsonify({"words": words_data})
+
+    except Exception as e:
+        print(f"An error occurred during OCR processing: {e}")
+        return jsonify({"error": f"Failed to process document for OCR: {e}"}), 500
+
 
 @app.route('/get-value-for-label', methods=['POST'])
 def get_value_for_label_handler():
