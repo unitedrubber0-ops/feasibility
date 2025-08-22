@@ -8,6 +8,7 @@ import PyPDF2
 import docx
 import google.generativeai as genai
 import google.api_core.exceptions
+import google.auth
 from google.cloud import vision
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
@@ -181,41 +182,66 @@ def export_docx_handler():
 @app.route('/process-document-for-ocr', methods=['POST'])
 def process_document_for_ocr_handler():
     """
-    Processes an uploaded document (PDF or image) using Google Cloud Vision API
-    to extract text and its coordinates.
+    Performs OCR using Google Cloud Vision with explicit credentials.
     """
     if 'sourceFile' not in request.files:
         return jsonify({"error": "Missing source file"}), 400
 
-    source_file = request.files['sourceFile']
-    
     try:
+        # --- Authentication Step ---
+        # Load credentials from the environment variable
+        credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        if not credentials_json:
+            raise Exception("Google Cloud credentials are not configured on the server.")
+        
+        credentials_info = json.loads(credentials_json)
+        credentials = google.auth.credentials.Credentials.from_authorized_user_info(credentials_info)
+        
+        # Create a client with the authenticated credentials
+        vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+        # --- End Authentication ---
+
+        source_file = request.files['sourceFile']
         content = source_file.read()
         image = vision.Image(content=content)
-        
-        client = vision.ImageAnnotatorClient()
-        response = client.document_text_detection(image=image)
+
+        # The 'document_text_detection' feature is the most powerful for OCR
+        response = vision_client.document_text_detection(image=image)
         
         if response.error.message:
-            raise Exception(f"Google Cloud Vision API error: {response.error.message}")
+            raise Exception(f"Vision API Error: {response.error.message}")
 
-        words_data = []
+        # --- Process the response to match the frontend's expected format ---
+        # (This part is complex, but it correctly transforms the Vision AI
+        # response into the simple format your frontend needs)
+        all_pages_data = []
         for page in response.full_text_annotation.pages:
+            page_data = {
+                "page": page.page_number,
+                "width": page.width,
+                "height": page.height,
+                "words": []
+            }
             for block in page.blocks:
                 for paragraph in block.paragraphs:
                     for word in paragraph.words:
+                        vertices = word.bounding_box.vertices
                         word_text = "".join([symbol.text for symbol in word.symbols])
-                        vertices = [[v.x, v.y] for v in word.bounding_box.vertices]
-                        words_data.append({
+                        word_data = {
                             "text": word_text,
-                            "vertices": vertices
-                        })
-
-        return jsonify({"words": words_data})
+                            "bbox": [
+                                vertices[0].x, vertices[0].y, # Top-left
+                                vertices[2].x, vertices[2].y  # Bottom-right
+                            ]
+                        }
+                        page_data["words"].append(word_data)
+            all_pages_data.append(page_data)
+            
+        return jsonify(all_pages_data)
 
     except Exception as e:
         print(f"An error occurred during OCR processing: {e}")
-        return jsonify({"error": f"Failed to process document for OCR: {e}"}), 500
+        return jsonify({"error": f"Failed to process document for interaction: {e}"}), 500
 
 
 @app.route('/get-value-for-label', methods=['POST'])
