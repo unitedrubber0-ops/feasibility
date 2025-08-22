@@ -8,11 +8,7 @@ import PyPDF2
 import docx
 import google.generativeai as genai
 import google.api_core.exceptions
-import google.auth
-import fitz # PyMuPDF
-from docx2pdf import convert
-from google.cloud import vision
-from google.oauth2 import service_account # <-- Use this specific import
+import fitz  # PyMuPDF, for both PDF and DOCX processing
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
@@ -185,86 +181,47 @@ def export_docx_handler():
 @app.route('/process-document-for-ocr', methods=['POST'])
 def process_document_for_ocr_handler():
     """
-    Performs OCR using Google Cloud Vision with explicit credentials.
+    Performs OCR on a document (PDF or DOCX) using PyMuPDF to extract all words and their coordinates.
+    This is a pure Python solution that runs reliably on servers.
     """
     if 'sourceFile' not in request.files:
         return jsonify({"error": "Missing source file"}), 400
 
-    temp_input_path = None
-    pdf_path = None
-
+    source_file = request.files['sourceFile']
+    
     try:
-        # --- CORRECTED AUTHENTICATION ---
-        credentials_json_str = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-        if not credentials_json_str:
-            raise Exception("Google Cloud credentials are not configured on the server.")
+        # Read the file into memory
+        file_stream = io.BytesIO(source_file.read())
         
-        credentials_info = json.loads(credentials_json_str)
-        # This is the corrected line:
-        credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        # Determine the file type for PyMuPDF
+        file_type = source_file.filename.split('.')[-1]
         
-        vision_client = vision.ImageAnnotatorClient(credentials=credentials)
-        # --- End Authentication ---
-
-        source_file = request.files['sourceFile']
-        filename = source_file.filename
+        # --- UNIFIED PROCESSING WITH PyMuPDF ---
+        # fitz.open can handle pdf, docx, and many other formats directly from a memory stream
+        doc = fitz.open(stream=file_stream, filetype=file_type)
         
-        # Save to a temporary file to work with it
-        temp_input_path = f"/tmp/{filename}"
-        source_file.save(temp_input_path)
-        
-        pdf_path = temp_input_path
-        
-        # If it's a DOCX, convert it to PDF first
-        if filename.endswith('.docx'):
-            pdf_path = f"/tmp/{os.path.splitext(filename)[0]}.pdf"
-            convert(temp_input_path, pdf_path)
-            
-        # Now, process the PDF version of the document
-        with open(pdf_path, "rb") as pdf_file:
-            content = pdf_file.read()
-        
-        image = vision.Image(content=content)
-        response = vision_client.document_text_detection(image=image)
-        
-        if response.error.message:
-            raise Exception(f"Vision API Error: {response.error.message}")
-
-        # --- Process the response to match the frontend's expected format ---
-        all_pages_data = []
-        for page in response.full_text_annotation.pages:
+        ocr_results = []
+        for page_num, page in enumerate(doc):
+            # The get_text("words") method provides the text and coordinates
+            words = page.get_text("words")
             page_data = {
-                "page": page.page_number if hasattr(page, 'page_number') else 1,
-                "width": page.width,
-                "height": page.height,
-                "words": []
+                "page": page_num + 1,
+                "width": page.rect.width,
+                "height": page.rect.height,
+                "words": [{
+                    "text": w[4],
+                    "bbox": [w[0], w[1], w[2], w[3]] # [left, top, right, bottom]
+                } for w in words]
             }
-            for block in page.blocks:
-                for paragraph in block.paragraphs:
-                    for word in paragraph.words:
-                        vertices = word.bounding_box.vertices
-                        word_text = "".join([symbol.text for symbol in word.symbols])
-                        word_data = {
-                            "text": word_text,
-                            "bbox": [
-                                vertices[0].x, vertices[0].y, # Top-left
-                                vertices[2].x, vertices[2].y  # Bottom-right
-                            ]
-                        }
-                        page_data["words"].append(word_data)
-            all_pages_data.append(page_data)
-            
-        return jsonify(all_pages_data)
+            ocr_results.append(page_data)
+        
+        doc.close()
+        return jsonify(ocr_results)
 
     except Exception as e:
-        print(f"An error occurred during OCR processing: {e}")
-        return jsonify({"error": f"Failed to process document for interaction: {str(e)}"}), 500
-    finally:
-        # Clean up temporary files
-        if temp_input_path and os.path.exists(temp_input_path):
-            os.remove(temp_input_path)
-        if pdf_path and pdf_path != temp_input_path and os.path.exists(pdf_path):
-            os.remove(pdf_path)
+        print(f"An error occurred during OCR processing with PyMuPDF: {e}")
+        # Provide a more specific error message to the frontend
+        return jsonify({"error": f"Failed to process document. It may be corrupted or an unsupported format. Details: {str(e)}"}), 500
 
 
 @app.route('/get-value-for-label', methods=['POST'])

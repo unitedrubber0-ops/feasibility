@@ -4,6 +4,4 @@ PyPDF2
 python-docx
 google-generativeai
 gunicorn  # Production web server
-google-cloud-vision
 PyMuPDF
-docx2pdf
