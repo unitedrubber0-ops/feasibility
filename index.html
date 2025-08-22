@@ -10,9 +10,6 @@
     <!-- PDF.js for rendering PDFs -->
     <script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
 
-    <!-- DocShift for rendering DOCX as HTML -->
-    <script src="https://cdn.jsdelivr.net/npm/docshift@latest/dist/docshift.min.js"></script>
-
     <style>
         body { font-family: 'Inter', sans-serif; }
         #viewer-container {
@@ -21,6 +18,11 @@
             border: 1px solid #d1d5db;
             overflow: auto;
             height: 80vh; /* Responsive height */
+        }
+        #viewer canvas {
+            display: block;
+            margin: 0 auto 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .balloon {
             position: absolute;
@@ -39,6 +41,7 @@
             cursor: pointer;
             user-select: none;
             transform: translate(-50%, -50%);
+            z-index: 10;
         }
     </style>
 </head>
@@ -50,21 +53,17 @@
             <p class="mt-2 text-lg text-gray-600">Upload a document to view and create a ballooned inspection report.</p>
         </header>
 
-        <!-- Main Two-Panel Layout -->
         <div class="grid md:grid-cols-2 gap-8">
-
             <!-- Left Panel: Document Viewer -->
             <div>
                 <h2 class="text-2xl font-bold mb-4">Document Viewer</h2>
                 <div class="bg-white p-4 rounded-lg shadow-md">
                     <input type="file" id="source-file-input" class="mb-4 block w-full text-sm text-gray-500
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-full file:border-0
-                        file:text-sm file:font-semibold
-                        file:bg-indigo-50 file:text-indigo-700
+                        file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0
+                        file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700
                         hover:file:bg-indigo-100" accept=".pdf,.docx">
                     <div id="viewer-container" class="rounded-lg">
-                        <div id="viewer" class="prose max-w-none"></div>
+                        <div id="viewer"></div>
                     </div>
                 </div>
             </div>
@@ -73,13 +72,6 @@
             <div>
                 <h2 class="text-2xl font-bold mb-4">Inspection Data</h2>
                 <div class="bg-white p-6 rounded-lg shadow-md">
-                    <div class="text-center mb-6">
-                        <button id="extract-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400">
-                            Extract Full Report Data
-                        </button>
-                    </div>
-
-                    <!-- Results Section -->
                     <div id="results-section" class="hidden">
                          <div class="flex justify-between items-center mb-4">
                             <h3 class="text-xl font-semibold">Ballooned Items</h3>
@@ -96,206 +88,240 @@
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">Value</th>
                                     </tr>
                                 </thead>
-                                <tbody id="report-body" class="bg-white divide-y divide-gray-200">
-                                    <!-- Ballooned items will be added here -->
-                                </tbody>
+                                <tbody id="report-body" class="bg-white divide-y divide-gray-200"></tbody>
                             </table>
                         </div>
                     </div>
                     
                     <div id="loader" class="text-center py-8 hidden">
                          <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                         <p class="mt-2 text-gray-600">AI is processing...</p>
+                         <p id="loader-text" class="mt-2 text-gray-600">Processing document...</p>
                     </div>
                     <div id="error-message" class="hidden text-center p-4 bg-red-100 text-red-700 rounded-lg"></div>
+                    <div id="placeholder-text" class="text-center text-gray-500 py-8">
+                        <p>Upload a document to begin.</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <script type="module">
-    // --- CONFIG ---
-    const backendUrlBase = 'https://feasibility-638d.onrender.com';
+        const backendUrlBase = 'https://feasibility-638d.onrender.com';
 
-    // --- DOM ELEMENTS ---
-    const sourceFileInput = document.getElementById('source-file-input');
-    const viewerContainer = document.getElementById('viewer-container');
-    const viewer = document.getElementById('viewer');
-    const reportTableBody = document.getElementById('report-body');
-    const resultsSection = document.getElementById('results-section');
-    const loader = document.getElementById('loader');
-    const errorMessage = document.getElementById('error-message');
-    const downloadBtn = document.getElementById('download-btn');
+        const sourceFileInput = document.getElementById('source-file-input');
+        const viewerContainer = document.getElementById('viewer-container');
+        const viewer = document.getElementById('viewer');
+        const reportTableBody = document.getElementById('report-body');
+        const resultsSection = document.getElementById('results-section');
+        const loader = document.getElementById('loader');
+        const loaderText = document.getElementById('loader-text');
+        const errorMessage = document.getElementById('error-message');
+        const downloadBtn = document.getElementById('download-btn');
+        const placeholderText = document.getElementById('placeholder-text');
 
-    let sourceFile = null;
-    let balloonCounter = 1;
-    let ocrData = null; // This will cache the OCR data with coordinates
-    let renderedPages = []; // To help with coordinate calculation
+        let sourceFile = null;
+        let balloonCounter = 1;
+        let ocrData = null;
+        let renderedPages = [];
 
-    // --- FILE HANDLING & INTERACTIVE PROCESSING ---
-    sourceFileInput.addEventListener('change', async (event) => {
-        sourceFile = event.target.files[0];
-        if (!sourceFile) return;
+        sourceFileInput.addEventListener('change', async (event) => {
+            sourceFile = event.target.files[0];
+            if (!sourceFile) return;
 
-        viewer.innerHTML = '';
-        ocrData = null;
-        renderedPages = [];
-        reportTableBody.innerHTML = '';
-        balloonCounter = 1;
+            // Reset UI for new file
+            viewer.innerHTML = '';
+            reportTableBody.innerHTML = '';
+            document.querySelectorAll('.balloon').forEach(b => b.remove());
+            ocrData = null;
+            renderedPages = [];
+            balloonCounter = 1;
+            resultsSection.classList.add('hidden');
+            placeholderText.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            loaderText.textContent = 'Processing document...';
+            loader.classList.remove('hidden');
 
-        loader.classList.remove('hidden');
-        errorMessage.classList.add('hidden');
-        
-        // Step 1: Send the document to the backend for OCR processing
-        const formData = new FormData();
-        formData.append('sourceFile', sourceFile);
+            const formData = new FormData();
+            formData.append('sourceFile', sourceFile);
 
-        try {
-            const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, {
-                method: 'POST',
-                body: formData,
-            });
-            if (!response.ok) throw new Error('Backend failed to process document.');
-            
-            const ocrResult = await response.json();
-            ocrData = ocrResult.words;
-            
-            // Step 2: Render the document on the frontend
-            await renderPdf(sourceFile); // We always render the PDF version
-            
-        } catch (error) {
-            showError(`Initialization failed: ${error.message}`);
-        } finally {
-            loader.classList.add('hidden');
-        }
-    });
-
-    async function renderPdf(file) {
-        const { pdfjsLib } = globalThis;
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
-        
-        const fileReader = new FileReader();
-        fileReader.onload = async function() {
-            const typedarray = new Uint8Array(this.result);
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: 1.5 });
-                const canvas = document.createElement('canvas');
-                canvas.dataset.pageNum = i; // Tag canvas with page number
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                await page.render({ canvasContext: context, viewport: viewport }).promise;
-                viewer.appendChild(canvas);
-                
-                // Store rendering info for coordinate mapping
-                renderedPages.push({
-                    canvas: canvas,
-                    viewport: viewport,
-                    pdfPage: page,
-                    pageNum: i
+            try {
+                // Step 1: Get OCR data from the backend
+                const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, {
+                    method: 'POST',
+                    body: formData,
                 });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Backend failed to process document.');
+                }
+                
+                ocrData = await response.json();
+                console.log("OCR data received and cached:", ocrData);
+
+                // Step 2: Render the PDF on the frontend
+                await renderPdf(sourceFile);
+                
+            } catch (error) {
+                console.error("Initialization failed:", error);
+                showError(`Initialization failed: ${error.message}`);
+                placeholderText.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
             }
-        };
-        fileReader.readAsArrayBuffer(file);
-    }
-    
-    // --- THE "MAGIC CLICK" ---
-    viewerContainer.addEventListener('click', (event) => {
-        if (!ocrData) {
-            alert("Please wait for the document to be processed.");
-            return;
-        }
+        });
 
-        const clickedWord = findWordAtClick(event);
-        if (!clickedWord) return; // Didn't click on any recognized word
-
-        const balloon = document.createElement('div');
-        balloon.className = 'balloon';
-        balloon.textContent = balloonCounter;
-        
-        const rect = viewerContainer.getBoundingClientRect();
-        balloon.style.left = `${event.clientX - rect.left}px`;
-        balloon.style.top = `${event.clientY - rect.top}px`;
-        viewerContainer.appendChild(balloon);
-        
-        addBalloonDataToTable(clickedWord, balloonCounter++);
-    });
-
-    function findWordAtClick(event) {
-        const targetCanvas = event.target;
-        if (targetCanvas.tagName !== 'CANVAS') return null;
-
-        const renderedPage = renderedPages.find(p => p.canvas === targetCanvas);
-        if (!renderedPage) return null;
-
-        // Convert browser click coordinates to PDF coordinates
-        const rect = targetCanvas.getBoundingClientRect();
-        const clickX = (event.clientX - rect.left);
-        const clickY = (event.clientY - rect.top);
-
-        // Find the word whose bounding box contains the click
-        for (const word of ocrData) {
-            const { vertices } = word;
-            const [x0, y0] = vertices[0];
-            const [x1, y1] = vertices[1];
-            const [x2, y2] = vertices[2];
-            const [x3, y3] = vertices[3];
+        async function renderPdf(file) {
+            const { pdfjsLib } = globalThis;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
             
-            // This is a simple bounding box check, more complex shapes might need a point-in-polygon test
-            if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y2) {
-                console.log("Found word:", word.text);
-                return word.text;
+            const fileReader = new FileReader();
+            fileReader.onload = async function() {
+                const typedarray = new Uint8Array(this.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const canvas = document.createElement('canvas');
+                    canvas.dataset.pageNum = i;
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    viewer.appendChild(canvas);
+                    renderedPages.push({ canvas, viewport });
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        }
+        
+        viewerContainer.addEventListener('click', (event) => {
+            if (!ocrData) {
+                alert("Please wait for the document to be processed, or upload a new one if it failed.");
+                return;
+            }
+
+            const clickedWord = findWordAtClick(event);
+            if (!clickedWord) return;
+
+            const balloon = document.createElement('div');
+            balloon.className = 'balloon';
+            balloon.textContent = balloonCounter;
+            
+            const rect = viewerContainer.getBoundingClientRect();
+            balloon.style.left = `${event.clientX - rect.left + viewerContainer.scrollLeft}px`;
+            balloon.style.top = `${event.clientY - rect.top + viewerContainer.scrollTop}px`;
+            viewerContainer.appendChild(balloon);
+            
+            addBalloonDataToTable(clickedWord, balloonCounter++);
+        });
+
+        function findWordAtClick(event) {
+            const targetCanvas = event.target;
+            if (targetCanvas.tagName !== 'CANVAS') return null;
+
+            const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
+            const pageOcrData = ocrData.find(p => p.page === pageNum);
+            const renderedPage = renderedPages[pageNum - 1];
+            if (!pageOcrData || !renderedPage) return null;
+
+            const rect = targetCanvas.getBoundingClientRect();
+            const scale = renderedPage.viewport.scale;
+            const clickX = (event.clientX - rect.left) / scale;
+            const clickY = (event.clientY - rect.top) / scale;
+
+            for (const word of pageOcrData.words) {
+                const [x0, y0, x1, y1] = word.bbox;
+                if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
+                    return word.text;
+                }
+            }
+            return null;
+        }
+
+        async function addBalloonDataToTable(label, number) {
+            loaderText.textContent = `Finding value for "${label}"...`;
+            loader.classList.remove('hidden');
+            errorMessage.classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('sourceFile', sourceFile);
+            formData.append('label', label);
+
+            try {
+                const response = await fetch(`${backendUrlBase}/get-value-for-label`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!response.ok) throw new Error((await response.json()).error || 'Backend failed');
+                
+                const data = await response.json();
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5;">${number}</div></td>
+                    <td class="px-4 py-3 font-medium">${data.parameter}</td>
+                    <td class="px-4 py-3">${data.value}</td>`;
+                reportTableBody.appendChild(tr);
+                resultsSection.classList.remove('hidden');
+            } catch (error) {
+                showError(`Could not get data for "${label}": ${error.message}`);
+                const lastBalloon = Array.from(viewerContainer.querySelectorAll('.balloon')).pop();
+                if (lastBalloon) lastBalloon.remove();
+                balloonCounter--;
+            } finally {
+                loader.classList.add('hidden');
             }
         }
-        return null;
-    }
-
-    // --- This function now calls the fast, targeted backend endpoint ---
-    async function addBalloonDataToTable(label, number) {
-        loader.classList.remove('hidden');
-        errorMessage.classList.add('hidden');
-
-        const formData = new FormData();
-        formData.append('sourceFile', sourceFile);
-        formData.append('label', label);
-
-        try {
-            const response = await fetch(`${backendUrlBase}/get-value-for-label`, {
-                method: 'POST',
-                body: formData,
+        
+        downloadBtn.addEventListener('click', async () => {
+            const rows = Array.from(reportTableBody.querySelectorAll('tr')).map(tr => {
+                const cells = tr.querySelectorAll('td');
+                return [cells[0].textContent.trim(), cells[1].textContent.trim(), cells[2].textContent.trim()];
             });
-            if (!response.ok) throw new Error((await response.json()).error || 'Backend failed');
+
+            if (rows.length === 0) {
+                showError("No items have been ballooned yet.");
+                return;
+            }
+
+            const reportData = {
+                header: { "Report Type": "Ballooned Inspection Report", "Source File": sourceFile.name },
+                table: { columns: ["No.", "Parameter", "Value"], rows: rows }
+            };
             
-            const data = await response.json();
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5;">${number}</div></td>
-                <td class="px-4 py-3 font-medium">${data.parameter}</td>
-                <td class="px-4 py-3">${data.value}</td>`;
-            reportTableBody.appendChild(tr);
-            resultsSection.classList.remove('hidden');
-        } catch (error) {
-            showError(`Could not get data for "${label}": ${error.message}`);
-            // Clean up the failed balloon
-            const lastBalloon = Array.from(viewerContainer.querySelectorAll('.balloon')).pop();
-            if(lastBalloon) lastBalloon.remove();
-            balloonCounter--;
-        } finally {
-            loader.classList.add('hidden');
+            loaderText.textContent = 'Generating DOCX file...';
+            loader.classList.remove('hidden');
+            downloadBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${backendUrlBase}/export-docx`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reportData),
+                });
+                if (!response.ok) throw new Error((await response.json()).error);
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'ballooned_report.docx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (error) {
+                showError(`Could not download file: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+                downloadBtn.disabled = false;
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
         }
-    }
-    
-    function showError(message) {
-        errorMessage.textContent = message;
-        errorMessage.classList.remove('hidden');
-    }
-
-    downloadBtn.addEventListener('click', () => {
-        alert("Download functionality would be implemented here, creating a DOCX from the table data.");
-    });
-
-</script>
+    </script>
 </body>
 </html>
