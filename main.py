@@ -1,4 +1,4 @@
-# main.py - FINAL UNIVERSAL PARSER
+# main.py - FINAL PRODUCTION VERSION
 
 import os
 import io
@@ -15,9 +15,7 @@ from flask_cors import CORS
 def extract_text_from_pdf_paginated(file_stream):
     try:
         pdf_reader = PyPDF2.PdfReader(file_stream)
-        pages_text = []
-        for page in pdf_reader.pages:
-            pages_text.append(page.extract_text() or "")
+        pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
         return pages_text
     except Exception as e:
         print(f"Error reading PDF paginated: {e}")
@@ -48,7 +46,7 @@ def generate_with_retry(model, prompt, max_retries=3, retry_delay=5):
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["https://feasibility-1.onrender.com", "http://127.0.0.1:5001"]}})
+CORS(app, resources={r"/*": {"origins": ["https://feasibility-1.onrender.com", "http://1227.0.0.1:5001"]}})
 
 # --- Gemini API Configuration ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -70,11 +68,9 @@ def generate_report_handler():
         if source_file.filename.endswith('.pdf'):
             source_pages = extract_text_from_pdf_paginated(source_stream)
         elif source_file.filename.endswith('.docx'):
-            source_text = extract_text_from_docx(source_stream)
-            source_pages.append(source_text)
-        else: # Handle TXT, MD, etc.
-            source_text = source_stream.read().decode('utf-8', errors='ignore')
-            source_pages.append(source_text)
+            source_pages.append(extract_text_from_docx(source_stream))
+        else:
+            source_pages.append(source_stream.read().decode('utf-8', errors='ignore'))
         
         if not source_pages:
             return jsonify({"error": "Could not extract text from the source file."}), 500
@@ -94,20 +90,23 @@ def generate_report_handler():
         aggregated_rows = []
         table_columns = None
 
+        # --- FINAL, PRODUCTION-HARDENED PROMPT ---
         prompt_extract_template = """
-        You are an expert data extraction assistant. Analyze the DOCUMENT PAGE text and extract all header and table data into a JSON format.
+        You are a highly robust data extraction assistant. Your task is to analyze potentially messy OCR text from a DOCUMENT PAGE and extract its header and table data into a perfect JSON format.
 
-        **DOCUMENT PAGE:**
+        **DOCUMENT PAGE TEXT:**
         ---
         {page_text}
         ---
 
-        **INSTRUCTIONS:**
-        1. Return a single raw JSON object with "header" and "table" keys.
-        2. The "header" should be a JSON object of all key-value pairs found at the top of the document.
-        3. The "table" object must have "columns" (a list of headers) and "rows" (a list of lists).
-        4. If no table is on this page, return an empty list for "rows".
-        5. If the document is a simple key-value table, treat the keys as the 'header' and the table itself as the 'table'.
+        **CRITICAL INSTRUCTIONS:**
+        1.  Your primary goal is to return a **complete and valid JSON object**. Do not stop halfway.
+        2.  The JSON must have two top-level keys: "header" (an object) and "table" (an object).
+        3.  The "table" object must contain "columns" (a list of strings) and "rows" (a list of lists of strings).
+        4.  **Handling Multi-line Table Rows:** Some rows in the source text span multiple lines (e.g., a "Description" parameter). You MUST consolidate all parts of a single logical row into one list in the JSON "rows" array.
+        5.  If no table exists on the page, the "rows" array must be an empty list `[]`.
+        6.  If no header data exists, the "header" object must be an empty object `{}`.
+        7.  Do not include this instructional text in your response. Your response must only be the raw JSON object.
         """
 
         for i, page_text in enumerate(source_pages):
@@ -142,17 +141,15 @@ def generate_report_handler():
 # --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])
 def export_docx_handler():
+    # ... This function is correct and does not need to be changed ...
     data = request.get_json()
     try:
         document = docx.Document()
         document.add_heading('Inspection Report', level=1)
-        
         if data.get("header"):
             for key, value in data.get('header', {}).items():
                 document.add_paragraph(f"{key}: {value}")
-        
         document.add_paragraph()
-        
         if data.get("table"):
             table_data = data.get('table', {})
             columns = table_data.get('columns', [])
@@ -167,7 +164,6 @@ def export_docx_handler():
                     row_cells = table.add_row().cells
                     for i, cell_text in enumerate(row_data):
                         row_cells[i].text = str(cell_text)
-
         file_stream = io.BytesIO()
         document.save(file_stream)
         file_stream.seek(0)
@@ -181,23 +177,29 @@ def export_docx_handler():
         print(f"Error creating DOCX file: {e}")
         return jsonify({"error": "Failed to create DOCX file"}), 500
 
-# In main.py, add this new endpoint
-
-@app.route('/get-value-at-point', methods=['POST'])
-def get_value_at_point_handler():
-    # In a real application, you'd get the cached OCR data.
-    # For now, we'll just re-process the source file each time.
-    if 'sourceFile' not in request.files or 'clickedWord' not in request.form:
-        return jsonify({"error": "Missing source file or clicked word"}), 400
+@app.route('/get-value-for-label', methods=['POST'])
+def get_value_for_label_handler():
+    """
+    Receives a document and a specific label, and returns the value for that label.
+    """
+    if 'sourceFile' not in request.files or 'label' not in request.form:
+        return jsonify({"error": "Missing source file or label"}), 400
 
     source_file = request.files['sourceFile']
-    clicked_word = request.form['clickedWord'] # In a real app, this would be derived from coordinates
+    label = request.form['label']
 
     try:
         source_stream = io.BytesIO(source_file.read())
-        # In a real app, you would use a library that gives you text WITH coordinates.
-        # For this example, we'll use the full text.
-        source_text = extract_text_from_docx(source_stream) if source_file.filename.endswith('.docx') else extract_text_from_pdf(io.BytesIO(source_file.read()))
+        source_text = ""
+        if source_file.filename.endswith('.pdf'):
+            # For this targeted task, we don't need page-by-page
+            pdf_reader = PyPDF2.PdfReader(source_stream)
+            for page in pdf_reader.pages:
+                source_text += page.extract_text() or ""
+        elif source_file.filename.endswith('.docx'):
+            source_text = extract_text_from_docx(source_stream)
+        else:
+            source_text = source_stream.read().decode('utf-8', errors='ignore')
 
         if not source_text:
             return jsonify({"error": "Could not extract text from source file."}), 500
@@ -206,12 +208,15 @@ def get_value_at_point_handler():
         return jsonify({"error": f"Failed to process file: {e}"}), 500
 
     try:
-        # Initialize your model as before...
-        model = genai.GenerativeModel("gemini-2.5-pro", safety_settings=[...])
+        # Initialize your model as before (safety settings, etc.)
+        # You can use a faster model like gemini-flash for this simple task
+        safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+        generation_config = genai.GenerationConfig(max_output_tokens=8192, temperature=0.1)
+        model = genai.GenerativeModel("gemini-1.5-flash-preview-0514", generation_config=generation_config, safety_settings=safety_settings) 
 
-        # A new, highly-focused prompt
+        # A new, highly-focused prompt for the ballooning task
         prompt = f"""
-        You are a data extraction specialist. In the following DOCUMENT TEXT, find the label "{clicked_word}" and return its corresponding value.
+        You are a data extraction specialist. In the following DOCUMENT TEXT, find the label "{label}" and return its corresponding value.
 
         **DOCUMENT TEXT:**
         ---
@@ -231,6 +236,6 @@ def get_value_at_point_handler():
 
     except Exception as e:
         return jsonify({"error": f"AI processing failed: {e}"}), 500
-    
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
