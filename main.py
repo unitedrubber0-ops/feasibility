@@ -9,7 +9,10 @@ import docx
 import google.generativeai as genai
 import google.api_core.exceptions
 import google.auth
+import fitz # PyMuPDF
+from docx2pdf import convert
 from google.cloud import vision
+from google.oauth2 import service_account # <-- Use this specific import
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
@@ -187,37 +190,51 @@ def process_document_for_ocr_handler():
     if 'sourceFile' not in request.files:
         return jsonify({"error": "Missing source file"}), 400
 
+    temp_input_path = None
+    pdf_path = None
+
     try:
-        # --- Authentication Step ---
-        # Load credentials from the environment variable
-        credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-        if not credentials_json:
+        # --- CORRECTED AUTHENTICATION ---
+        credentials_json_str = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        if not credentials_json_str:
             raise Exception("Google Cloud credentials are not configured on the server.")
         
-        credentials_info = json.loads(credentials_json)
-        credentials = google.auth.credentials.Credentials.from_authorized_user_info(credentials_info)
+        credentials_info = json.loads(credentials_json_str)
+        # This is the corrected line:
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
         
-        # Create a client with the authenticated credentials
         vision_client = vision.ImageAnnotatorClient(credentials=credentials)
         # --- End Authentication ---
 
         source_file = request.files['sourceFile']
-        content = source_file.read()
+        filename = source_file.filename
+        
+        # Save to a temporary file to work with it
+        temp_input_path = f"/tmp/{filename}"
+        source_file.save(temp_input_path)
+        
+        pdf_path = temp_input_path
+        
+        # If it's a DOCX, convert it to PDF first
+        if filename.endswith('.docx'):
+            pdf_path = f"/tmp/{os.path.splitext(filename)[0]}.pdf"
+            convert(temp_input_path, pdf_path)
+            
+        # Now, process the PDF version of the document
+        with open(pdf_path, "rb") as pdf_file:
+            content = pdf_file.read()
+        
         image = vision.Image(content=content)
-
-        # The 'document_text_detection' feature is the most powerful for OCR
         response = vision_client.document_text_detection(image=image)
         
         if response.error.message:
             raise Exception(f"Vision API Error: {response.error.message}")
 
         # --- Process the response to match the frontend's expected format ---
-        # (This part is complex, but it correctly transforms the Vision AI
-        # response into the simple format your frontend needs)
         all_pages_data = []
         for page in response.full_text_annotation.pages:
             page_data = {
-                "page": page.page_number,
+                "page": page.page_number if hasattr(page, 'page_number') else 1,
                 "width": page.width,
                 "height": page.height,
                 "words": []
@@ -241,7 +258,13 @@ def process_document_for_ocr_handler():
 
     except Exception as e:
         print(f"An error occurred during OCR processing: {e}")
-        return jsonify({"error": f"Failed to process document for interaction: {e}"}), 500
+        return jsonify({"error": f"Failed to process document for interaction: {str(e)}"}), 500
+    finally:
+        # Clean up temporary files
+        if temp_input_path and os.path.exists(temp_input_path):
+            os.remove(temp_input_path)
+        if pdf_path and pdf_path != temp_input_path and os.path.exists(pdf_path):
+            os.remove(pdf_path)
 
 
 @app.route('/get-value-for-label', methods=['POST'])
