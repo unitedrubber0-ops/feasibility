@@ -557,17 +557,7 @@
             // Hide results section if no more balloons
             if (balloonData.length === 0) {
                 resultsSection.classList.add('hidden');
-            }
-                row.remove();
-                
-                // 3. Redraw the balloons on the viewer (this naturally removes the deleted one)
-                repositionBalloons();
-                
-                // 4. Hide results if no balloons are left
-                if (balloonData.length === 0) {
-                    resultsSection.classList.add('hidden');
-                    placeholderText.classList.remove('hidden');
-                }
+                placeholderText.classList.remove('hidden');
             }
         }
         
