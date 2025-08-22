@@ -266,8 +266,6 @@
             balloonData = [];
             // Clear the report table
             if (reportTableBody) reportTableBody.innerHTML = '';
-            // Reset the balloon counter
-            balloonCounter = 1;
             // Hide results section if it's visible
             resultsSection.classList.add('hidden');
         }
@@ -302,7 +300,7 @@
             // Reset UI
             viewer.innerHTML = ''; reportTableBody.innerHTML = '';
             document.querySelectorAll('.balloon').forEach(b => b.remove());
-            ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
+            ocrData = null; pdfDoc = null; balloonData = []; changePdfScale(0, true);
             resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
             errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
             loader.classList.remove('hidden');
