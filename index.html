@@ -7,14 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- PDF.js for rendering PDFs -->
+    <!-- Load libraries in order -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" defer></script>
     
-    <!-- pdf-lib for drawing balloons -->
-    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <!-- Initialize libraries -->
     <script>
-        // Initialize PDF libraries and verify loading
-        document.addEventListener('DOMContentLoaded', async function() {
+        window.initializePdfLibraries = async function() {
+            // Wait for a small delay to ensure libraries are loaded
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
             try {
                 // Verify PDF.js loading
                 if (typeof pdfjsLib === 'undefined') {
@@ -23,12 +25,27 @@
                 console.log('PDF.js loaded successfully');
                 
                 // Verify PDF-Lib loading
-                if (typeof PDFLib === 'undefined') {
+                if (typeof PDFLib === 'undefined' || !window.PDFLib) {
                     throw new Error('PDF-Lib failed to load');
                 }
                 console.log('PDF-Lib loaded successfully');
+                
+                // Initialize any required configuration
+                window.pdfjsLib = pdfjsLib;
+                window.PDFLib = PDFLib;
             } catch (error) {
                 console.error('Library initialization error:', error);
+                throw error; // Re-throw to handle in the calling code
+            }
+        };
+
+        // Wait for both DOM and scripts to be ready
+        window.addEventListener('load', async () => {
+            try {
+                await window.initializePdfLibraries();
+            } catch (error) {
+                // Show error in UI if needed
+                console.error('Failed to initialize PDF libraries:', error);
             }
         });
     </script>
