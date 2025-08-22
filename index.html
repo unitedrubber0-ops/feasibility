@@ -9,22 +9,26 @@
     
     <!-- PDF.js for rendering PDFs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
-        // Ensure PDF.js worker is loaded
-        if (typeof pdfjsLib !== 'undefined') {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        }
-    </script>
     
     <!-- pdf-lib for drawing balloons -->
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script>
-        // Verify PDF-Lib loaded correctly
-        window.addEventListener('load', function() {
-            if (typeof PDFLib === 'undefined') {
-                console.error('PDF-Lib failed to load');
-            } else {
+        // Initialize PDF libraries and verify loading
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                // Verify PDF.js loading
+                if (typeof pdfjsLib === 'undefined') {
+                    throw new Error('PDF.js failed to load');
+                }
+                console.log('PDF.js loaded successfully');
+                
+                // Verify PDF-Lib loading
+                if (typeof PDFLib === 'undefined') {
+                    throw new Error('PDF-Lib failed to load');
+                }
                 console.log('PDF-Lib loaded successfully');
+            } catch (error) {
+                console.error('Library initialization error:', error);
             }
         });
     </script>
@@ -198,16 +202,31 @@
         }
 
          async function renderPdf(file, scale) {
-            const { pdfjsLib } = globalThis;
-            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
-            
-            const fileReader = new FileReader();
-            fileReader.onload = async function() {
-                const typedarray = new Uint8Array(this.result);
-                pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
+            try {
+                // Ensure PDF.js is properly loaded
+                if (!window.pdfjsLib) {
+                    throw new Error('PDF.js library not loaded');
+                }
+                
+                // Set worker source using window.pdfjsLib
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                
+                // Use Promise-based FileReader
+                const arrayBuffer = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(file);
+                });
+
+                // Load the PDF document
+                const typedarray = new Uint8Array(arrayBuffer);
+                pdfDoc = await window.pdfjsLib.getDocument(typedarray).promise;
                 await renderAllPdfPages(scale);
-            };
-            fileReader.readAsArrayBuffer(file);
+            } catch (error) {
+                console.error('PDF rendering error:', error);
+                showError(`Failed to render PDF: ${error.message}`);
+            }
         }
         
         async function renderAllPdfPages(scale) {
