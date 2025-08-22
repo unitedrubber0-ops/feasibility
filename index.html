@@ -356,14 +356,24 @@
         
         // --- (downloadPdfWithBalloons and downloadDocxReport are the same) ---
         async function downloadPdfWithBalloons() {
-            if (!pdfDoc) return;
-            if (balloonData.length === 0) { showError("No balloons to add."); return; }
+            if (!pdfDoc) {
+                showError("PDF download is only available for uploaded PDF files.");
+                return;
+            }
+            if (balloonData.length === 0) { 
+                showError("No balloons to add to the PDF."); 
+                return; 
+            }
+            if (typeof window.PDFLib === 'undefined') {
+                showError("PDF library failed to load. Please check your internet connection and refresh the page.");
+                return;
+            }
 
             loaderText.textContent = 'Generating ballooned PDF...';
             loader.classList.remove('hidden');
             
             try {
-                const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
                 const existingPdfBytes = await sourceFile.arrayBuffer();
                 const pdfDocToModify = await PDFDocument.load(existingPdfBytes);
                 const pages = pdfDocToModify.getPages();
