@@ -8,10 +8,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- PDF.js for rendering PDFs -->
-    <script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Ensure PDF.js worker is loaded
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
     
-    <!-- pdf-lib for drawing balloons on the downloaded PDF entirely in the browser -->
-    <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+    <!-- pdf-lib for drawing balloons -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.umd.min.js"></script>
+    <script>
+        // Verify PDF-Lib loaded correctly
+        window.addEventListener('load', function() {
+            if (typeof PDFLib === 'undefined') {
+                console.error('PDF-Lib failed to load');
+            } else {
+                console.log('PDF-Lib loaded successfully');
+            }
+        });
+    </script>
 
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -356,16 +372,17 @@
         
         // --- (downloadPdfWithBalloons and downloadDocxReport are the same) ---
         async function downloadPdfWithBalloons() {
+            // Check required conditions
             if (!pdfDoc) {
-                showError("PDF download is only available for uploaded PDF files.");
+                showError("Please upload a PDF file first.");
                 return;
             }
             if (balloonData.length === 0) { 
-                showError("No balloons to add to the PDF."); 
+                showError("Add some balloons before downloading."); 
                 return; 
             }
-            if (!window.PDFLib) {
-                showError("PDF library failed to load. Please refresh the page and try again.");
+            if (typeof PDFLib === 'undefined') {
+                showError("PDF library is not ready. Please refresh the page and try again.");
                 return;
             }
 
@@ -373,7 +390,7 @@
             loader.classList.remove('hidden');
             
             try {
-                const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
+                const { PDFDocument, rgb, StandardFonts } = PDFLib;
                 const existingPdfBytes = await sourceFile.arrayBuffer();
                 const pdfDocToModify = await PDFDocument.load(existingPdfBytes);
                 const pages = pdfDocToModify.getPages();
