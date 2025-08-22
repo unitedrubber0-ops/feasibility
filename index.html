@@ -489,15 +489,16 @@
             const wordInfo = findWordAtClick(event);
             if (!wordInfo) return;
 
-            // Check if the clicked word is a number
-            const isNumeric = !isNaN(wordInfo.text) && !isNaN(parseFloat(wordInfo.text));
+            // Check if the text is a number (with or without brackets)
+            const numericMatch = wordInfo.text.match(/^\s*\(?\s*(\d*\.?\d+)\s*\)?\s*$/);
+            const isNumeric = numericMatch !== null;
             
             let customLabel, value;
             if (isNumeric) {
-                // For numbers, ask for parameter name and use number as value
+                // For numbers, ask for parameter name and use the full text (preserving brackets if present)
                 customLabel = prompt("Enter a parameter name for this measurement:", "");
                 if (!customLabel) return;
-                value = wordInfo.text;
+                value = wordInfo.text.trim(); // Keep brackets if they exist
             } else {
                 // For non-numbers, use existing behavior
                 customLabel = prompt("Enter a label for this balloon:", wordInfo.text);
@@ -547,13 +548,31 @@
             const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
             const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
 
-            for (const word of pageOcrData.words) {
+            // First, check for a number with brackets
+            for (let i = 0; i < pageOcrData.words.length; i++) {
+                const word = pageOcrData.words[i];
                 const [x0, y0, x1, y1] = word.bbox;
+                
                 if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
-                    // Return both the text and the bounding box for positioning
+                    let fullText = word.text;
+                    
+                    // Check if this word is a number and if it's surrounded by brackets
+                    if (!isNaN(parseFloat(word.text))) {
+                        // Check previous word for opening bracket
+                        if (i > 0 && pageOcrData.words[i-1].text.trim() === '(') {
+                            // Check next word for closing bracket
+                            if (i < pageOcrData.words.length - 1 && pageOcrData.words[i+1].text.trim() === ')') {
+                                fullText = `(${word.text})`; // Include the brackets
+                                // Use the extended bounding box
+                                x0 = pageOcrData.words[i-1].bbox[0];
+                                x1 = pageOcrData.words[i+1].bbox[2];
+                            }
+                        }
+                    }
+                    
                     return {
-                        text: word.text,
-                        bbox: word.bbox
+                        text: fullText,
+                        bbox: [x0, y0, x1, y1]
                     };
                 }
             }
