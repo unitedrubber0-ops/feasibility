@@ -3,192 +3,246 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Automated Inspection Report Generator</title>
+    <title>Interactive Inspection Report Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- PDF.js for rendering PDFs -->
+    <script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
+
+    <!-- DocShift for rendering DOCX as HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/docshift@latest/dist/docshift.min.js"></script>
+
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
+        body { font-family: 'Inter', sans-serif; }
+        #viewer-container {
+            position: relative;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            overflow: auto;
+            height: 80vh; /* Responsive height */
         }
-        .file-drop-area {
-            transition: all 0.3s ease;
-        }
-        .file-drop-area.dragover {
-            background-color: #e0f2fe;
-            border-color: #38bdf8;
-        }
-        #report-table th, #report-table td {
-            white-space: normal;
-            word-break: break-word;
+        .balloon {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            background-color: #ef4444;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: pointer;
+            user-select: none;
+            transform: translate(-50%, -50%);
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-100 text-gray-800">
 
-    <div class="container mx-auto max-w-5xl px-4 py-12">
-        <header class="text-center mb-12">
-            <h1 class="text-4xl font-bold text-gray-900">Automated Inspection Report Generator</h1>
-            <p class="mt-4 text-lg text-gray-600">Upload a template and a source file to instantly generate a populated inspection report.</p>
+    <div class="container mx-auto p-4">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-gray-900">Interactive Report Tool</h1>
+            <p class="mt-2 text-lg text-gray-600">Upload a document to view and create a ballooned inspection report.</p>
         </header>
 
-        <main>
-            <!-- File Upload Section -->
-            <div class="grid md:grid-cols-2 gap-8 mb-12">
-                <!-- Template File Upload -->
-                <div id="template-drop-area" class="file-drop-area border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-white shadow-sm">
-                    <input type="file" id="template-file-input" class="hidden" accept=".docx,.txt,.md">
-                    <label for="template-file-input" class="cursor-pointer">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                        <h3 class="mt-2 text-lg font-semibold text-gray-900">Upload Template File</h3>
-                        <p class="mt-1 text-sm text-gray-500">Drag & drop or click to upload</p>
-                        <p class="mt-1 text-xs text-gray-500">DOCX, TXT, MD</p>
-                        <p id="template-file-name" class="mt-4 text-sm font-medium text-indigo-600"></p>
-                    </label>
-                </div>
+        <!-- Main Two-Panel Layout -->
+        <div class="grid md:grid-cols-2 gap-8">
 
-                <!-- Source Data File Upload -->
-                <div id="source-drop-area" class="file-drop-area border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-white shadow-sm">
-                    <input type="file" id="source-file-input" class="hidden" accept=".pdf,.docx,.txt,.md">
-                    <label for="source-file-input" class="cursor-pointer">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                            <path d="M9 17v-2a4 4 0 014-4h1.5l2.08-2.773a2 2 0 011.664-.897H21.5a2 2 0 011.664.897L25.25 11H27a4 4 0 014 4v2m-18 8v-6a2 2 0 012-2h12a2 2 0 012 2v6m-16 0h16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                        <h3 class="mt-2 text-lg font-semibold text-gray-900">Upload Source Data File</h3>
-                        <p class="mt-1 text-sm text-gray-500">Drag & drop or click to upload</p>
-                        <p class="mt-1 text-xs text-gray-500">PDF, DOCX, TXT, MD</p>
-                        <p id="source-file-name" class="mt-4 text-sm font-medium text-indigo-600"></p>
-                    </label>
+            <!-- Left Panel: Document Viewer -->
+            <div>
+                <h2 class="text-2xl font-bold mb-4">Document Viewer</h2>
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <input type="file" id="source-file-input" class="mb-4 block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100" accept=".pdf,.docx">
+                    <div id="viewer-container" class="rounded-lg">
+                        <div id="viewer" class="prose max-w-none"></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Action Button -->
-            <div class="text-center">
-                <button id="generate-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                    Generate Report
-                </button>
-            </div>
+            <!-- Right Panel: Controls & Results -->
+            <div>
+                <h2 class="text-2xl font-bold mb-4">Inspection Data</h2>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="text-center mb-6">
+                        <button id="extract-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400">
+                            Extract Full Report Data
+                        </button>
+                    </div>
 
-            <!-- Results Section -->
-            <div id="results-section" class="mt-16 hidden">
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-3xl font-bold text-gray-900">Generated Report</h2>
-                    <button id="download-btn" class="hidden bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-300">
-                        Download .docx
-                    </button>
-                </div>
-
-                <!-- Header Info -->
-                <div id="report-header" class="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-4 mb-8 bg-white p-6 rounded-lg shadow-md">
-                    <!-- Header data will be injected here -->
-                </div>
-
-                <!-- Report Table -->
-                <div class="overflow-x-auto bg-white shadow-md rounded-lg">
-                    <table id="report-table" class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <!-- Table headers will be injected here -->
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <!-- Table rows will be injected here -->
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Loading Spinner -->
-                <div id="loader" class="text-center py-12 hidden">
-                    <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p class="mt-4 text-lg font-medium text-gray-600">Analyzing documents and generating report...</p>
-                </div>
-                 <!-- Error Message -->
-                <div id="error-message" class="hidden text-center mt-8 p-4 bg-red-100 text-red-700 rounded-lg">
+                    <!-- Results Section -->
+                    <div id="results-section" class="hidden">
+                         <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-semibold">Ballooned Items</h3>
+                            <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">
+                                Download .docx
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table id="report-table" class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-bold uppercase">No.</th>
+                                        <th class="px-4 py-2 text-left text-xs font-bold uppercase">Parameter</th>
+                                        <th class="px-4 py-2 text-left text-xs font-bold uppercase">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- Ballooned items will be added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div id="loader" class="text-center py-8 hidden">
+                         <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                         <p class="mt-2 text-gray-600">AI is processing...</p>
+                    </div>
+                    <div id="error-message" class="hidden text-center p-4 bg-red-100 text-red-700 rounded-lg"></div>
                 </div>
             </div>
-        </main>
+        </div>
     </div>
 
-    <script>
+    <script type="module">
+        // --- CONFIG ---
         const backendUrlBase = 'https://feasibility-638d.onrender.com';
 
-        // File input elements
-        const templateFileInput = document.getElementById('template-file-input');
+        // --- DOM ELEMENTS ---
         const sourceFileInput = document.getElementById('source-file-input');
-        const templateDropArea = document.getElementById('template-drop-area');
-        const sourceDropArea = document.getElementById('source-drop-area');
-        const templateFileName = document.getElementById('template-file-name');
-        const sourceFileName = document.getElementById('source-file-name');
-
-        // Action and display elements
-        const generateBtn = document.getElementById('generate-btn');
+        const viewerContainer = document.getElementById('viewer-container');
+        const viewer = document.getElementById('viewer');
+        const extractBtn = document.getElementById('extract-btn');
         const downloadBtn = document.getElementById('download-btn');
+        const reportTableBody = document.getElementById('report-body');
         const resultsSection = document.getElementById('results-section');
         const loader = document.getElementById('loader');
         const errorMessage = document.getElementById('error-message');
-        const reportHeader = document.getElementById('report-header');
-        const reportTable = document.getElementById('report-table');
 
-        let templateFile = null;
         let sourceFile = null;
-        let currentReportData = null;
-
-        function setupDragAndDrop(dropArea, fileInput, fileNameDisplay, fileStore) {
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropArea.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
-            });
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dropArea.addEventListener(eventName, () => dropArea.classList.add('dragover'), false);
-            });
-            ['dragleave', 'drop'].forEach(eventName => {
-                dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragover'), false);
-            });
-            dropArea.addEventListener('drop', (e) => {
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    fileInput.files = files;
-                    handleFileChange(fileInput, fileNameDisplay, (file) => fileStore(file));
-                }
-            }, false);
-        }
+        let balloonCounter = 1;
         
-        function handleFileChange(input, nameDisplay, fileVariableSetter) {
-             if (input.files.length > 0) {
-                const file = input.files[0];
-                nameDisplay.textContent = file.name;
-                fileVariableSetter(file);
+        // --- FILE HANDLING & RENDERING ---
+        sourceFileInput.addEventListener('change', async (event) => {
+            sourceFile = event.target.files[0];
+            if (!sourceFile) return;
+
+            viewer.innerHTML = ''; // Clear previous content
+            
+            if (sourceFile.name.endsWith('.pdf')) {
+                await renderPdf(sourceFile);
+            } else if (sourceFile.name.endsWith('.docx')) {
+                await renderDocx(sourceFile);
             } else {
-                nameDisplay.textContent = '';
-                fileVariableSetter(null);
+                alert('Unsupported file type. Please upload a PDF or DOCX.');
+            }
+        });
+
+        async function renderPdf(file) {
+            const { pdfjsLib } = globalThis;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
+            
+            const fileReader = new FileReader();
+            fileReader.onload = async function() {
+                const typedarray = new Uint8Array(this.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    viewer.appendChild(canvas);
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        }
+
+        async function renderDocx(file) {
+            try {
+                // docshift is loaded from the CDN
+                const html = await docshift.toHtml(file);
+                viewer.innerHTML = html;
+            } catch (error) {
+                console.error("Error rendering DOCX:", error);
+                showError("Could not render the DOCX file.");
             }
         }
 
-        templateFileInput.addEventListener('change', () => handleFileChange(templateFileInput, templateFileName, (file) => templateFile = file));
-        sourceFileInput.addEventListener('change', () => handleFileChange(sourceFileInput, sourceFileName, (file) => sourceFile = file));
+        // --- BALLOONING LOGIC ---
+        viewerContainer.addEventListener('click', (event) => {
+            if (!sourceFile) {
+                alert("Please upload a document first.");
+                return;
+            }
+            
+            // This is a simplified version. A real implementation would need
+            // to get the text under the cursor. For now, we'll use a prompt.
+            const clickedWord = prompt("What parameter did you click on? (e.g., 'HOSE_ID')");
+            if (!clickedWord) return;
 
-        setupDragAndDrop(templateDropArea, templateFileInput, templateFileName, (file) => templateFile = file);
-        setupDragAndDrop(sourceDropArea, sourceFileInput, sourceFileName, (file) => sourceFile = file);
+            const balloon = document.createElement('div');
+            balloon.className = 'balloon';
+            balloon.textContent = balloonCounter;
+            
+            // Position balloon relative to the container
+            const rect = viewerContainer.getBoundingClientRect();
+            balloon.style.left = `${event.clientX - rect.left}px`;
+            balloon.style.top = `${event.clientY - rect.top}px`;
+            
+            viewerContainer.appendChild(balloon);
+            
+            addBalloonDataToTable(clickedWord, balloonCounter++);
+        });
 
-        generateBtn.addEventListener('click', async () => {
-            if (!templateFile || !sourceFile) {
-                showError("Please upload both a template and a source file.");
+        async function addBalloonDataToTable(label, number) {
+            // This is where you would call your new backend endpoint
+            // For now, we will simulate it.
+            // In a real app: const data = await fetch('/get-value-for-label', ...);
+            
+            // Simulated response
+            const simulatedData = {
+                parameter: label,
+                value: `Value for ${label}` // Placeholder
+            };
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5;">${number}</div></td>
+                <td class="px-4 py-3 font-medium">${simulatedData.parameter}</td>
+                <td class="px-4 py-3">${simulatedData.value}</td>
+            `;
+            reportTableBody.appendChild(tr);
+            resultsSection.classList.remove('hidden');
+        }
+
+        // --- EXISTING FULL REPORT EXTRACTION ---
+        extractBtn.addEventListener('click', async () => {
+             if (!sourceFile) {
+                showError("Please upload a source file first.");
                 return;
             }
 
-            resultsSection.classList.remove('hidden');
             loader.classList.remove('hidden');
-            generateBtn.disabled = true;
-            downloadBtn.classList.add('hidden');
             errorMessage.classList.add('hidden');
-            reportHeader.innerHTML = '';
-            reportTable.innerHTML = '';
-            currentReportData = null;
+            resultsSection.classList.add('hidden');
+            reportTableBody.innerHTML = ''; // Clear ballooning results
 
             const formData = new FormData();
-            formData.append('templateFile', templateFile);
             formData.append('sourceFile', sourceFile);
+            // The backend expects a template file, so we send a dummy one.
+            formData.append('templateFile', new Blob(['dummy']), 'dummy.txt');
 
             try {
                 const response = await fetch(`${backendUrlBase}/generate-report`, {
@@ -198,126 +252,49 @@
 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+                    throw new Error(errorData.error || `HTTP error!`);
                 }
 
                 const reportData = await response.json();
-                currentReportData = reportData;
-                displayResults(reportData);
-                downloadBtn.classList.remove('hidden');
+                displayFullReport(reportData);
+                resultsSection.classList.remove('hidden');
 
             } catch (error) {
-                console.error("Error generating report:", error);
                 showError(`An error occurred: ${error.message}`);
             } finally {
                 loader.classList.add('hidden');
-                generateBtn.disabled = false;
             }
         });
-
-        downloadBtn.addEventListener('click', async () => {
-            if (!currentReportData) {
-                showError("No report data available to download.");
-                return;
-            }
-
-            downloadBtn.textContent = 'Preparing...';
-            downloadBtn.disabled = true;
-
-            try {
-                const response = await fetch(`${backendUrlBase}/export-docx`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentReportData),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
-                }
-
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'inspection_report.docx';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                a.remove();
-
-            } catch (error) {
-                console.error("Error downloading file:", error);
-                showError(`Could not download file: ${error.message}`);
-            } finally {
-                downloadBtn.textContent = 'Download .docx';
-                downloadBtn.disabled = false;
-            }
-        });
-
-        // --- THIS IS THE CORRECTED, ROBUST FUNCTION ---
-        function displayResults(data) {
-            // --- Header Section (with safety check) ---
-            reportHeader.innerHTML = '';
-            // Check if the 'header' key exists and is an object
+        
+        function displayFullReport(data) {
+            let itemNumber = 1;
+            // Display header items
             if (data.header && typeof data.header === 'object') {
                 for (const [key, value] of Object.entries(data.header)) {
-                    const div = document.createElement('div');
-                    div.innerHTML = `<p class="text-sm font-medium text-gray-500">${key}</p><p class="text-lg font-semibold text-gray-900">${value}</p>`;
-                    reportHeader.appendChild(div);
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 text-center">${itemNumber++}</td>
+                        <td class="px-4 py-3 font-medium">${key}</td>
+                        <td class="px-4 py-3">${value}</td>`;
+                    reportTableBody.appendChild(tr);
                 }
             }
-
-            // --- Table Section (with new, robust safety checks) ---
-            reportTable.innerHTML = ''; 
-            // Check if 'table' exists, and if 'columns' and 'rows' exist as arrays
-            if (data.table && Array.isArray(data.table.columns) && Array.isArray(data.table.rows)) {
-                const thead = document.createElement('thead');
-                thead.className = "bg-gray-100";
-                let tr = document.createElement('tr');
-                data.table.columns.forEach(col => {
-                    const th = document.createElement('th');
-                    th.scope = "col";
-                    th.className = "px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider";
-                    th.textContent = col;
-                    tr.appendChild(th);
+            // Display table rows
+            if (data.table && Array.isArray(data.table.rows)) {
+                 data.table.rows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 text-center">${itemNumber++}</td>
+                        <td class="px-4 py-3 font-medium">${row[0] || ''}</td>
+                        <td class="px-4 py-3">${row.slice(1).join(', ')}</td>`;
+                    reportTableBody.appendChild(tr);
                 });
-                thead.appendChild(tr);
-                reportTable.appendChild(thead);
-
-                const tbody = document.createElement('tbody');
-                tbody.className = "bg-white divide-y divide-gray-200";
-                data.table.rows.forEach(rowData => {
-                    tr = document.createElement('tr');
-                    // Ensure rowData is an array before trying to loop
-                    if (Array.isArray(rowData)) {
-                        rowData.forEach(cellData => {
-                            const td = document.createElement('td');
-                            td.className = "px-6 py-4 text-sm text-gray-700";
-                            td.textContent = cellData;
-                            tr.appendChild(td);
-                        });
-                    }
-                    tbody.appendChild(tr);
-                });
-                reportTable.appendChild(tbody);
-            } else {
-                // If the table data is missing, show a helpful message
-                console.warn("AI response was missing a valid table structure.");
-                const tbody = document.createElement('tbody');
-                tbody.innerHTML = `<tr><td class="px-6 py-4 text-center text-gray-500" colspan="100%">The AI returned header data but no table data for this document.</td></tr>`;
-                reportTable.appendChild(tbody);
             }
         }
         
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.classList.remove('hidden');
-            reportHeader.innerHTML = '';
-            reportTable.innerHTML = '';
-            loader.classList.add('hidden');
-            downloadBtn.classList.add('hidden');
         }
 
     </script>
