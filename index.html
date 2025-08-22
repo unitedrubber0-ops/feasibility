@@ -75,9 +75,18 @@
             background-color: transparent; color: red;
             border-radius: 50%; display: flex; align-items: center;
             justify-content: center; font-size: 14px; font-weight: bold;
-            cursor: default; user-select: none; 
+            cursor: grab; user-select: none; 
             transform: translate(-50%, -50%); z-index: 10;
             border: 2px solid red;
+            transition: box-shadow 0.2s ease;
+        }
+        .balloon:hover {
+            box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.2);
+        }
+        .balloon.dragging {
+            cursor: grabbing;
+            box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.3);
+            z-index: 20;
         }
         /* Style for the new remove button */
         .remove-balloon-btn {
@@ -225,12 +234,79 @@
                 balloon.className = 'balloon';
                 balloon.textContent = data.number;
                 balloon.dataset.balloonNumber = data.number;
+                balloon.dataset.pageNum = data.page;
                 
                 balloon.style.left = `${data.x * canvas.width}px`;
                 balloon.style.top = `${data.y * canvas.height}px`;
+                
+                // Add drag functionality
+                balloon.draggable = true;
+                balloon.addEventListener('dragstart', handleDragStart);
+                balloon.addEventListener('drag', handleDrag);
+                balloon.addEventListener('dragend', handleDragEnd);
+                
                 viewer.appendChild(balloon);
             });
         }
+
+        // Drag handling functions
+        function handleDragStart(e) {
+            this.classList.add('dragging');
+            // Store the initial mouse offset from the balloon's top-left corner
+            const rect = this.getBoundingClientRect();
+            e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+            e.dataTransfer.effectAllowed = 'move';
+            this.dataset.offsetX = e.clientX - rect.left;
+            this.dataset.offsetY = e.clientY - rect.top;
+        }
+
+        function handleDrag(e) {
+            if (!e.clientX) return; // Ignore invalid drag events
+            
+            const balloon = e.target;
+            const container = viewer;
+            const canvas = viewer.querySelector(`canvas[data-page-num="${balloon.dataset.pageNum}"]`);
+            if (!canvas) return;
+            
+            // Calculate new position
+            const containerRect = container.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            // Get the position relative to the canvas
+            const offsetX = parseFloat(balloon.dataset.offsetX) || 0;
+            const offsetY = parseFloat(balloon.dataset.offsetY) || 0;
+            
+            const x = (e.clientX - canvasRect.left - offsetX) / canvas.width;
+            const y = (e.clientY - canvasRect.top - offsetY) / canvas.height;
+            
+            // Update balloon data
+            const balloonNumber = parseInt(balloon.dataset.balloonNumber);
+            const balloonIndex = balloonData.findIndex(b => b.number === balloonNumber);
+            if (balloonIndex >= 0) {
+                balloonData[balloonIndex].x = Math.max(0, Math.min(1, x));
+                balloonData[balloonIndex].y = Math.max(0, Math.min(1, y));
+            }
+            
+            // Update visual position
+            balloon.style.left = `${x * canvas.width}px`;
+            balloon.style.top = `${y * canvas.height}px`;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            // Final position update
+            handleDrag(e);
+        }
+
+        // Add viewer container event listeners for drag and drop
+        viewer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        viewer.addEventListener('drop', (e) => {
+            e.preventDefault();
+        });
 
         // Function to update the report table
         function updateTableUI() {
