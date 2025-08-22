@@ -1,4 +1,4 @@
-# main.py - FINAL PRODUCTION VERSION
+# main.py - FINAL PRODUCTION VERSION with Backend Rendering
 
 import os
 import io
@@ -6,9 +6,9 @@ import json
 import time
 import PyPDF2
 import docx
+import fitz  # PyMuPDF for all document processing
 import google.generativeai as genai
 import google.api_core.exceptions
-import fitz  # PyMuPDF, for both PDF and DOCX processing
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
@@ -181,8 +181,7 @@ def export_docx_handler():
 @app.route('/process-document-for-ocr', methods=['POST'])
 def process_document_for_ocr_handler():
     """
-    Performs OCR on a document (PDF or DOCX) using PyMuPDF to extract all words and their coordinates.
-    This is a pure Python solution that runs reliably on servers.
+    Performs OCR using PyMuPDF and returns coordinate data AND page count.
     """
     if 'sourceFile' not in request.files:
         return jsonify({"error": "Missing source file"}), 400
@@ -190,38 +189,56 @@ def process_document_for_ocr_handler():
     source_file = request.files['sourceFile']
     
     try:
-        # Read the file into memory
         file_stream = io.BytesIO(source_file.read())
-        
-        # Determine the file type for PyMuPDF
         file_type = source_file.filename.split('.')[-1]
-        
-        # --- UNIFIED PROCESSING WITH PyMuPDF ---
-        # fitz.open can handle pdf, docx, and many other formats directly from a memory stream
         doc = fitz.open(stream=file_stream, filetype=file_type)
         
         ocr_results = []
         for page_num, page in enumerate(doc):
-            # The get_text("words") method provides the text and coordinates
             words = page.get_text("words")
             page_data = {
                 "page": page_num + 1,
-                "width": page.rect.width,
-                "height": page.rect.height,
-                "words": [{
-                    "text": w[4],
-                    "bbox": [w[0], w[1], w[2], w[3]] # [left, top, right, bottom]
-                } for w in words]
+                "width": page.rect.width, "height": page.rect.height,
+                "words": [{"text": w[4], "bbox": [w[0], w[1], w[2], w[3]]} for w in words]
             }
             ocr_results.append(page_data)
         
+        # Return both the page count and the OCR results
+        response_data = {"page_count": doc.page_count, "ocr_results": ocr_results}
         doc.close()
-        return jsonify(ocr_results)
+        return jsonify(response_data)
 
     except Exception as e:
-        print(f"An error occurred during OCR processing with PyMuPDF: {e}")
-        # Provide a more specific error message to the frontend
-        return jsonify({"error": f"Failed to process document. It may be corrupted or an unsupported format. Details: {str(e)}"}), 500
+        print(f"An error occurred during OCR processing: {e}")
+        return jsonify({"error": f"Failed to process document: {str(e)}"}), 500
+
+@app.route('/get-page-as-image/<int:page_num>', methods=['POST'])
+def get_page_as_image_handler(page_num):
+    """
+    Renders a specific page of a PDF or DOCX file as a PNG image.
+    """
+    if 'sourceFile' not in request.files:
+        return jsonify({"error": "Missing source file"}), 400
+        
+    source_file = request.files['sourceFile']
+    try:
+        file_stream = io.BytesIO(source_file.read())
+        file_type = source_file.filename.split('.')[-1]
+        doc = fitz.open(stream=file_stream, filetype=file_type)
+
+        if page_num < 1 or page_num > doc.page_count:
+            return jsonify({"error": "Invalid page number"}), 400
+
+        page = doc.load_page(page_num - 1) # Page numbers are 0-indexed in PyMuPDF
+        pix = page.get_pixmap(dpi=150) # Render at 150 DPI for good quality
+        img_byte_arr = io.BytesIO(pix.tobytes("png"))
+        doc.close()
+
+        return send_file(img_byte_arr, mimetype='image/png')
+
+    except Exception as e:
+        print(f"Error rendering page as image: {e}")
+        return jsonify({"error": f"Failed to render page: {str(e)}"}), 500
 
 
 @app.route('/get-value-for-label', methods=['POST'])

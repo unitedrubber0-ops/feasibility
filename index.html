@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- PDF.js for rendering PDFs -->
+    <!-- PDF.js is loaded from its reliable CDN -->
     <script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
 
     <style>
@@ -19,7 +19,7 @@
             overflow: auto;
             height: 80vh; /* Responsive height */
         }
-        #viewer canvas {
+        #viewer canvas, #viewer img {
             display: block;
             margin: 0 auto 1rem;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
@@ -122,7 +122,7 @@
 
         let sourceFile = null;
         let balloonCounter = 1;
-        let ocrData = null;
+        let ocrData = null; // Will now be an object: { page_count, ocr_results }
         let renderedPages = [];
 
         sourceFileInput.addEventListener('change', async (event) => {
@@ -142,25 +142,28 @@
             loaderText.textContent = 'Processing document...';
             loader.classList.remove('hidden');
 
-            const formData = new FormData();
-            formData.append('sourceFile', sourceFile);
-
+            const isDocx = sourceFile.name.endsWith('.docx');
+            
             try {
-                // Step 1: Get OCR data from the backend
-                const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, {
-                    method: 'POST',
-                    body: formData,
-                });
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'Backend failed to process document.');
-                }
+                // Step 1: Get OCR data AND page count from the backend
+                const formData = new FormData();
+                formData.append('sourceFile', sourceFile);
                 
-                ocrData = await response.json();
-                console.log("OCR data received and cached:", ocrData);
+                const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, {
+                    method: 'POST', body: formData,
+                });
+                if (!response.ok) throw new Error((await response.json()).error);
+                
+                const data = await response.json();
+                ocrData = data.ocr_results; // Cache the coordinate data
+                console.log("OCR data received and cached.");
 
-                // Step 2: Render the PDF on the frontend
-                await renderPdf(sourceFile);
+                // Step 2: Render the document on the frontend
+                if (isDocx) {
+                    await renderDocxAsImages(data.page_count);
+                } else {
+                    await renderPdf(sourceFile);
+                }
                 
             } catch (error) {
                 console.error("Initialization failed:", error);
@@ -216,20 +219,57 @@
             addBalloonDataToTable(clickedWord, balloonCounter++);
         });
 
+        async function renderDocxAsImages(pageCount) {
+            for (let i = 1; i <= pageCount; i++) {
+                const formData = new FormData();
+                formData.append('sourceFile', sourceFile);
+                
+                // Fetch each page as an image from the backend
+                const response = await fetch(`${backendUrlBase}/get-page-as-image/${i}`, {
+                    method: 'POST', body: formData,
+                });
+                if (!response.ok) continue;
+
+                const blob = await response.blob();
+                const imageUrl = URL.createObjectURL(blob);
+                
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.dataset.pageNum = i;
+                img.style.display = 'block';
+                img.style.margin = '0 auto 1rem';
+                img.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                viewer.appendChild(img);
+            }
+        }
+
         function findWordAtClick(event) {
-            const targetCanvas = event.target;
-            if (targetCanvas.tagName !== 'CANVAS') return null;
+            // This function now needs to handle both canvas (PDF) and img (DOCX) clicks
+            const target = event.target;
+            const pageNum = parseInt(target.dataset.pageNum, 10);
+            if (!pageNum) return null;
 
-            const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
             const pageOcrData = ocrData.find(p => p.page === pageNum);
-            const renderedPage = renderedPages[pageNum - 1];
-            if (!pageOcrData || !renderedPage) return null;
+            if (!pageOcrData) return null;
 
-            const rect = targetCanvas.getBoundingClientRect();
-            const scale = renderedPage.viewport.scale;
-            const clickX = (event.clientX - rect.left) / scale;
-            const clickY = (event.clientY - rect.top) / scale;
+            // Get original document dimensions from OCR data
+            const originalWidth = pageOcrData.width;
+            const originalHeight = pageOcrData.height;
 
+            // Get rendered element dimensions
+            const rect = target.getBoundingClientRect();
+            const renderedWidth = rect.width;
+            const renderedHeight = rect.height;
+
+            // Calculate scale factors
+            const scaleX = originalWidth / renderedWidth;
+            const scaleY = originalHeight / renderedHeight;
+            
+            // Convert browser click coordinates to original document coordinates
+            const clickX = (event.clientX - rect.left) * scaleX;
+            const clickY = (event.clientY - rect.top) * scaleY;
+
+            // Find the word whose bounding box contains the click
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
                 if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
