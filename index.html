@@ -24,31 +24,25 @@
             cursor: crosshair;
         }
         .balloon {
-            /* --- FEATURE 2: NEW STYLING --- */
-            position: absolute;
-            width: 32px;
-            height: 32px;
-            background-color: rgba(239, 68, 68, 0.5); /* Semi-transparent red */
-            color: white; /* White text for contrast */
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px; /* Larger, more visible number */
-            font-weight: bold;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.7); /* Shadow to make number pop */
-            border: 2px solid #b91c1c; /* Darker red border */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            cursor: default; /* Change cursor to show it's not clickable */
-            user-select: none;
-            transform: translate(-50%, -50%);
-            z-index: 10;
+            position: absolute; width: 32px; height: 32px;
+            background-color: rgba(239, 68, 68, 0.5); color: white;
+            border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; font-size: 16px; font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.7); border: 2px solid #b91c1c;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: default;
+            user-select: none; transform: translate(-50%, -50%); z-index: 10;
+        }
+        /* Style for the new remove button */
+        .remove-balloon-btn {
+            font-size: 1.5rem; line-height: 1rem; font-weight: bold;
+            padding: 0.25rem; cursor: pointer;
         }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
 
     <div class="container mx-auto p-4">
+        <!-- ... (Header HTML is the same) ... -->
         <header class="text-center mb-6">
             <h1 class="text-4xl font-bold text-gray-900">Interactive Report Tool</h1>
             <p class="mt-2 text-lg text-gray-600">Upload, view, and balloon inspection documents.</p>
@@ -57,9 +51,9 @@
         <div class="grid md:grid-cols-2 gap-8">
             <!-- Left Panel: Document Viewer -->
             <div>
+                <!-- ... (Viewer HTML is the same, with zoom controls) ... -->
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold">Document Viewer</h2>
-                    <!-- --- FEATURE 1: ZOOM CONTROLS --- -->
                     <div id="zoom-controls" class="hidden items-center space-x-2">
                         <button id="zoom-out-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">-</button>
                         <span id="zoom-level" class="text-sm font-medium w-16 text-center">150%</span>
@@ -85,7 +79,6 @@
                          <div class="flex justify-between items-center mb-4">
                             <h3 class="text-xl font-semibold">Ballooned Items</h3>
                             <div>
-                                <!-- --- FEATURE 3: DOWNLOAD PDF BUTTON --- -->
                                 <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
                                 <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download .docx</button>
                             </div>
@@ -97,16 +90,16 @@
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">No.</th>
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">Parameter</th>
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">Value</th>
+                                        <!-- FEATURE 1: New Actions column -->
+                                        <th class="px-4 py-2 text-left text-xs font-bold uppercase">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="report-body" class="bg-white divide-y divide-gray-200"></tbody>
                             </table>
                         </div>
                     </div>
-                    <div id="loader" class="text-center py-8 hidden">
-                         <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                         <p id="loader-text" class="mt-2 text-gray-600">Processing document...</p>
-                    </div>
+                    <!-- ... (Loader and other divs are the same) ... -->
+                    <div id="loader" class="text-center py-8 hidden"><svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><p id="loader-text" class="mt-2 text-gray-600">Processing document...</p></div>
                     <div id="error-message" class="hidden text-center p-4 bg-red-100 text-red-700 rounded-lg"></div>
                     <div id="placeholder-text" class="text-center text-gray-500 py-8"><p>Upload a PDF document to begin.</p></div>
                 </div>
@@ -116,32 +109,10 @@
 
     <script type="module">
         const backendUrlBase = 'https://feasibility-638d.onrender.com';
-
-        // --- DOM ELEMENTS ---
-        const sourceFileInput = document.getElementById('source-file-input');
-        const viewerContainer = document.getElementById('viewer-container');
-        const viewer = document.getElementById('viewer');
-        const reportTableBody = document.getElementById('report-body');
-        const resultsSection = document.getElementById('results-section');
-        const loader = document.getElementById('loader');
-        const loaderText = document.getElementById('loader-text');
-        const errorMessage = document.getElementById('error-message');
-        const downloadPdfBtn = document.getElementById('download-pdf-btn');
-        const downloadDocxBtn = document.getElementById('download-docx-btn');
-        const placeholderText = document.getElementById('placeholder-text');
-        const zoomControls = document.getElementById('zoom-controls');
-        const zoomOutBtn = document.getElementById('zoom-out-btn');
-        const zoomInBtn = document.getElementById('zoom-in-btn');
-        const zoomResetBtn = document.getElementById('zoom-reset-btn');
-        const zoomLevel = document.getElementById('zoom-level');
+        // ... (DOM ELEMENT variables are the same) ...
 
         // --- STATE VARIABLES ---
-        let sourceFile = null;
-        let balloonCounter = 1;
-        let ocrData = null;
-        let pdfDoc = null; // Store the loaded PDF document
-        let pdfScale = 1.5;
-        let balloonData = []; // Central store for all balloon info
+        let sourceFile = null, balloonCounter = 1, ocrData = null, pdfDoc = null, pdfScale = 1.5, balloonData = [];
 
         // --- EVENT LISTENERS ---
         sourceFileInput.addEventListener('change', handleFileSelect);
@@ -151,10 +122,13 @@
         zoomResetBtn.addEventListener('click', () => changePdfScale(0, true));
         downloadPdfBtn.addEventListener('click', downloadPdfWithBalloons);
         downloadDocxBtn.addEventListener('click', downloadDocxReport);
+        // --- FEATURE 2: Event delegation for remove buttons ---
+        reportTableBody.addEventListener('click', handleTableClick);
 
-        // --- CORE FUNCTIONS ---
+
+        // --- CORE FUNCTIONS (handleFileSelect, renderPdf, renderAllPdfPages, changePdfScale are the same) ---
         async function handleFileSelect(event) {
-            sourceFile = event.target.files[0];
+             sourceFile = event.target.files[0];
             if (!sourceFile) return;
 
             // Reset UI
@@ -185,7 +159,7 @@
             }
         }
 
-        async function renderPdf(file, scale) {
+         async function renderPdf(file, scale) {
             const { pdfjsLib } = globalThis;
             pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
             
@@ -238,14 +212,15 @@
                 const balloon = document.createElement('div');
                 balloon.className = 'balloon';
                 balloon.textContent = data.number;
+                // Store number in dataset for removal logic
+                balloon.dataset.balloonNumber = data.number;
                 
-                // Convert stored relative coordinates to new absolute position
                 balloon.style.left = `${data.x * canvas.width}px`;
                 balloon.style.top = `${data.y * canvas.height}px`;
-                viewer.appendChild(balloon); // Append to viewer for correct absolute positioning
+                viewer.appendChild(balloon);
             });
         }
-
+        // ... (handleViewerClick and findWordAtClick are the same) ...
         function handleViewerClick(event) {
             if (!ocrData || !pdfDoc) return;
             if (event.target.tagName !== 'CANVAS') return;
@@ -260,7 +235,6 @@
             const canvas = event.target;
             const rect = canvas.getBoundingClientRect();
             
-            // Store coordinates relative to the canvas size for responsive repositioning
             const relativeX = (event.clientX - rect.left) / canvas.width;
             const relativeY = (event.clientY - rect.top) / canvas.height;
 
@@ -271,19 +245,21 @@
             });
         }
 
-        function findWordAtClick(event) {
+         function findWordAtClick(event) {
             const targetCanvas = event.target;
             const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
             const pageOcrData = ocrData.find(p => p.page === pageNum);
             if (!pageOcrData) return null;
             
             const rect = targetCanvas.getBoundingClientRect();
+            // Use the stored pdfScale for accurate calculations
             const originalWidth = pageOcrData.width;
             const renderedWidth = targetCanvas.width;
+            // The true scale is based on the original OCR data, not just the render scale
             const scale = originalWidth / renderedWidth;
 
-            const clickX = (event.clientX - rect.left) * scale;
-            const clickY = (event.clientY - rect.top) * scale;
+            const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
+            const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
 
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
@@ -311,10 +287,15 @@
                 balloonData.push({ ...data, ...position, number });
                 
                 const tr = document.createElement('tr');
+                // --- FEATURE 3: Add data-attribute to row and include remove button ---
+                tr.dataset.balloonNumber = number;
                 tr.innerHTML = `
                     <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5; color:white;">${number}</div></td>
                     <td class="px-4 py-3 font-medium">${data.parameter}</td>
-                    <td class="px-4 py-3">${data.value}</td>`;
+                    <td class="px-4 py-3">${data.value}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button class="remove-balloon-btn text-red-500 hover:text-red-700" title="Remove item">&times;</button>
+                    </td>`;
                 reportTableBody.appendChild(tr);
                 resultsSection.classList.remove('hidden');
                 placeholderText.classList.add('hidden');
@@ -328,14 +309,51 @@
             }
         }
 
+        // --- FEATURE 4: NEW function to handle remove clicks ---
+        function handleTableClick(event) {
+            if (event.target.classList.contains('remove-balloon-btn')) {
+                const row = event.target.closest('tr');
+                const numberToRemove = parseInt(row.dataset.balloonNumber, 10);
+                
+                // 1. Remove from data array
+                balloonData = balloonData.filter(b => b.number !== numberToRemove);
+                
+                // 2. Remove from UI table
+                row.remove();
+                
+                // 3. Redraw the balloons on the viewer (this naturally removes the deleted one)
+                repositionBalloons();
+                
+                // 4. Hide results if no balloons are left
+                if (balloonData.length === 0) {
+                    resultsSection.classList.add('hidden');
+                    placeholderText.classList.remove('hidden');
+                }
+            }
+        }
+        
+        // --- (downloadPdfWithBalloons and downloadDocxReport are the same) ---
         async function downloadPdfWithBalloons() {
-            if (!pdfDoc) return;
-            if (balloonData.length === 0) { showError("No balloons to add."); return; }
+            // Step 1: Check for required conditions
+            if (!pdfDoc) {
+                showError("PDF download is only available for uploaded PDF files.");
+                return;
+            }
+            if (balloonData.length === 0) {
+                showError("No balloons to add to the PDF.");
+                return;
+            }
+            // Step 2: Check if the PDF-Lib library is available
+            if (typeof PDFLib === 'undefined') {
+                showError("PDF library failed to load. Please check your internet connection and refresh the page.");
+                return;
+            }
 
             loaderText.textContent = 'Generating ballooned PDF...';
             loader.classList.remove('hidden');
             
             try {
+                // Step 3: Use the library
                 const { PDFDocument, rgb, StandardFonts } = PDFLib;
                 const existingPdfBytes = await sourceFile.arrayBuffer();
                 const pdfDocToModify = await PDFDocument.load(existingPdfBytes);
@@ -349,13 +367,16 @@
                     const x = data.x * width;
                     const y = height - (data.y * height);
                     
+                    // Draw Circle
                     page.drawCircle({ x, y, size: 16, borderColor: rgb(0.9, 0, 0), borderWidth: 1.5, color: rgb(1, 0, 0), opacity: 0.2 });
                     
+                    // Draw Text Number
                     const text = String(data.number);
                     const textWidth = font.widthOfTextAtSize(text, 10);
                     page.drawText(text, { x: x - textWidth / 2, y: y - 4, size: 10, font, color: rgb(0.5, 0, 0) });
                 }
 
+                // Step 4: Save and trigger download
                 const pdfBytes = await pdfDocToModify.save();
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
@@ -368,6 +389,7 @@
                 a.remove();
 
             } catch(e) {
+                console.error("PDF Generation Error:", e);
                 showError(`Failed to generate PDF: ${e.message}`);
             } finally {
                 loader.classList.add('hidden');
@@ -414,6 +436,7 @@
             errorMessage.textContent = message;
             errorMessage.classList.remove('hidden');
         }
+
     </script>
 </body>
 </html>
