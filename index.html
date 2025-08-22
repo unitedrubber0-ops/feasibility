@@ -72,12 +72,12 @@
         }
         .balloon {
             position: absolute; width: 24px; height: 24px;
-            background-color: rgb(255, 0, 0); color: white;
+            background-color: transparent; color: red;
             border-radius: 50%; display: flex; align-items: center;
             justify-content: center; font-size: 14px; font-weight: bold;
             cursor: default; user-select: none; 
             transform: translate(-50%, -50%); z-index: 10;
-            border: 2px solid white; box-shadow: 0 0 0 1px red;
+            border: 2px solid red;
         }
         /* Style for the new remove button */
         .remove-balloon-btn {
@@ -189,17 +189,21 @@
 
         // Function to reorder and renumber all balloons
         function reorderBalloons() {
-            // Sort balloon data by page and position
-            balloonData.sort((a, b) => {
-                if (a.page !== b.page) return a.page - b.page;
-                if (Math.abs(a.y - b.y) > 0.1) return a.y - b.y;
-                return a.x - b.x;
-            });
-
-            // Renumber all balloons sequentially
-            balloonData.forEach((data, index) => {
-                data.number = index + 1;
-            });
+            // If this is a new balloon being added, give it the next number
+            const nextNumber = balloonData.length;
+            const newBalloon = balloonData[balloonData.length - 1];
+            if (newBalloon && !newBalloon.number) {
+                newBalloon.number = nextNumber;
+            }
+            
+            // For removed balloons, we don't need to sort, just renumber sequentially
+            if (balloonData.length > 0) {
+                // Maintain the existing order and just fix any gaps in numbering
+                balloonData.sort((a, b) => a.number - b.number);
+                balloonData.forEach((data, index) => {
+                    data.number = index + 1;
+                });
+            }
 
             // Update UI
             updateBalloonsUI();
@@ -239,8 +243,8 @@
                     <td class="px-4 py-2">${data.number}</td>
                     <td class="px-4 py-2">${data.label}</td>
                     <td class="px-4 py-2">${data.value || '-'}</td>
-                    <td class="px-4 py-2">
-                        <button class="text-red-600 hover:text-red-800" data-balloon-number="${data.number}">
+                    <td class="px-4 py-2 text-center">
+                        <button class="remove-balloon-btn text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50" data-balloon-number="${data.number}">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
@@ -406,17 +410,43 @@
             if (!ocrData || !pdfDoc) return;
             if (event.target.tagName !== 'CANVAS') return;
 
-            const clickedWord = findWordAtClick(event);
-            if (!clickedWord) return;
+            const wordInfo = findWordAtClick(event);
+            if (!wordInfo) return;
 
-            const customLabel = prompt("Enter a label for this balloon:", clickedWord);
-            if (!customLabel) return;
+            // Check if the clicked word is a number
+            const isNumeric = !isNaN(wordInfo.text) && !isNaN(parseFloat(wordInfo.text));
+            
+            let customLabel, value;
+            if (isNumeric) {
+                // For numbers, ask for parameter name and use number as value
+                customLabel = prompt("Enter a parameter name for this measurement:", "");
+                if (!customLabel) return;
+                value = wordInfo.text;
+            } else {
+                // For non-numbers, use existing behavior
+                customLabel = prompt("Enter a label for this balloon:", wordInfo.text);
+                if (!customLabel) return;
+                value = null;
+            }
 
             const canvas = event.target;
-            const rect = canvas.getBoundingClientRect();
+            const pageOcrData = ocrData.find(p => p.page === parseInt(canvas.dataset.pageNum, 10));
             
-            const relativeX = (event.clientX - rect.left) / canvas.width;
-            const relativeY = (event.clientY - rect.top) / canvas.height;
+            // Calculate the position for the balloon
+            // Position it to the right of the word
+            const [x0, y0, x1, y1] = wordInfo.bbox;
+            const relativeX = (x1 / pageOcrData.width) + 0.02; // Add a small offset to the right
+            const relativeY = ((y0 + y1) / 2) / pageOcrData.height; // Vertically center with the word
+            
+            // If it's a numeric value, we'll handle it differently
+            if (isNumeric) {
+                addBalloonDataWithValue(customLabel, value, {
+                    page: parseInt(canvas.dataset.pageNum, 10),
+                    x: relativeX,
+                    y: relativeY
+                });
+                return;
+            }
 
             addBalloonDataToTable(customLabel, { 
                 page: parseInt(canvas.dataset.pageNum, 10), 
@@ -444,10 +474,31 @@
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
                 if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
-                    return word.text;
+                    // Return both the text and the bounding box for positioning
+                    return {
+                        text: word.text,
+                        bbox: word.bbox
+                    };
                 }
             }
             return null;
+        }
+
+        // Function to add balloon data for numeric values
+        function addBalloonDataWithValue(parameter, value, position) {
+            // Add new balloon data
+            balloonData.push({
+                parameter,
+                value,
+                ...position,
+                label: parameter // keeping label for compatibility
+            });
+            
+            // Reorder and renumber all balloons
+            reorderBalloons();
+            
+            resultsSection.classList.remove('hidden');
+            placeholderText.classList.add('hidden');
         }
 
         async function addBalloonDataToTable(label, position) {
@@ -464,11 +515,13 @@
                 
                 const data = await response.json();
                 
-                // Add new balloon data without a number (it will be assigned during reordering)
-                balloonData.push({ ...data, ...position, label });
+                // Add new balloon data with the next sequential number
+                const nextNumber = balloonData.length + 1;
+                balloonData.push({ ...data, ...position, label, number: nextNumber });
                 
-                // Reorder and renumber all balloons
-                reorderBalloons();
+                // Update UI
+                updateBalloonsUI();
+                updateTableUI();
                 
                 resultsSection.classList.remove('hidden');
                 placeholderText.classList.add('hidden');
@@ -482,19 +535,29 @@
 
         // Handle remove button clicks in the table
         function handleTableClick(event) {
-            if (event.target.classList.contains('remove-balloon-btn')) {
-                const row = event.target.closest('tr');
-                const numberToRemove = parseInt(row.dataset.balloonNumber, 10);
-                
-                // Remove the balloon data
-                balloonData = balloonData.filter(data => data.number !== numberToRemove);
-                
-                // Reorder and renumber remaining balloons
-                reorderBalloons();
-                // 1. Remove from data array
-                balloonData = balloonData.filter(b => b.number !== numberToRemove);
-                
-                // 2. Remove from UI table
+            const deleteButton = event.target.closest('button[data-balloon-number]');
+            if (!deleteButton) return;
+
+            const numberToRemove = parseInt(deleteButton.dataset.balloonNumber, 10);
+            
+            // Remove from data array
+            balloonData = balloonData.filter(b => b.number !== numberToRemove);
+            
+            // Remove the balloon marker from the viewer
+            const balloon = document.querySelector(`.balloon[data-balloon-number="${numberToRemove}"]`);
+            if (balloon) balloon.remove();
+            
+            // Remove the table row
+            const row = deleteButton.closest('tr');
+            if (row) row.remove();
+            
+            // Reorder and renumber remaining balloons
+            reorderBalloons();
+            
+            // Hide results section if no more balloons
+            if (balloonData.length === 0) {
+                resultsSection.classList.add('hidden');
+            }
                 row.remove();
                 
                 // 3. Redraw the balloons on the viewer (this naturally removes the deleted one)
