@@ -489,8 +489,8 @@
             const wordInfo = findWordAtClick(event);
             if (!wordInfo) return;
 
-            // Check if the text is a number (with or without brackets)
-            const numericMatch = wordInfo.text.match(/^\s*\(?\s*(\d*\.?\d+)\s*\)?\s*$/);
+            // Check if the text is a number (with optional brackets and/or tolerance)
+            const numericMatch = wordInfo.text.match(/^\s*\(?\s*(\d*\.?\d+)\s*(±\s*\d*\.?\d+)?\s*\)?\s*$/);
             const isNumeric = numericMatch !== null;
             
             let customLabel, value;
@@ -548,31 +548,65 @@
             const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
             const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
 
-            // First, check for a number with brackets
+            // First, check for a number with brackets and/or tolerance
             for (let i = 0; i < pageOcrData.words.length; i++) {
                 const word = pageOcrData.words[i];
                 const [x0, y0, x1, y1] = word.bbox;
                 
                 if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
                     let fullText = word.text;
+                    let extendedX0 = x0;
+                    let extendedX1 = x1;
                     
-                    // Check if this word is a number and if it's surrounded by brackets
+                    // Check if this word is a number
                     if (!isNaN(parseFloat(word.text))) {
-                        // Check previous word for opening bracket
-                        if (i > 0 && pageOcrData.words[i-1].text.trim() === '(') {
-                            // Check next word for closing bracket
-                            if (i < pageOcrData.words.length - 1 && pageOcrData.words[i+1].text.trim() === ')') {
-                                fullText = `(${word.text})`; // Include the brackets
-                                // Use the extended bounding box
-                                x0 = pageOcrData.words[i-1].bbox[0];
-                                x1 = pageOcrData.words[i+1].bbox[2];
+                        let hasChanges = false;
+                        
+                        // Check for brackets
+                        if (i > 0 && pageOcrData.words[i-1].text.trim() === '(' &&
+                            i < pageOcrData.words.length - 1 && pageOcrData.words[i+1].text.trim() === ')') {
+                            fullText = `(${word.text})`;
+                            extendedX0 = pageOcrData.words[i-1].bbox[0];
+                            extendedX1 = pageOcrData.words[i+1].bbox[2];
+                            hasChanges = true;
+                        }
+                        
+                        // Check for ± tolerance in next words
+                        let j = hasChanges ? i + 2 : i + 1; // Skip closing bracket if we found brackets
+                        
+                        // Check next word(s) for ± symbol and tolerance value
+                        while (j < pageOcrData.words.length) {
+                            const nextWord = pageOcrData.words[j].text.trim();
+                            
+                            // Check for ± symbol
+                            if (nextWord === '±' || nextWord.includes('±')) {
+                                // Look for the tolerance number
+                                if (j + 1 < pageOcrData.words.length && !isNaN(parseFloat(pageOcrData.words[j+1].text))) {
+                                    // Include both ± and the tolerance number
+                                    fullText = hasChanges ? 
+                                        fullText.slice(0, -1) + ` ±${pageOcrData.words[j+1].text})` :
+                                        `${fullText} ±${pageOcrData.words[j+1].text}`;
+                                    extendedX1 = pageOcrData.words[j+1].bbox[2];
+                                    break;
+                                } else if (!isNaN(parseFloat(nextWord.replace('±', '')))) {
+                                    // ± and number are together
+                                    fullText = hasChanges ?
+                                        fullText.slice(0, -1) + ` ${nextWord})` :
+                                        `${fullText} ${nextWord}`;
+                                    extendedX1 = pageOcrData.words[j].bbox[2];
+                                    break;
+                                }
+                            } else if (!nextWord.match(/^[,\s]*$/)) {
+                                // Stop if we hit any non-whitespace, non-comma word
+                                break;
                             }
+                            j++;
                         }
                     }
                     
                     return {
                         text: fullText,
-                        bbox: [x0, y0, x1, y1]
+                        bbox: [extendedX0, y0, extendedX1, y1]
                     };
                 }
             }
