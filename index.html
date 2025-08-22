@@ -71,13 +71,13 @@
             cursor: crosshair;
         }
         .balloon {
-            position: absolute; width: 32px; height: 32px;
-            background-color: rgba(239, 68, 68, 0.5); color: white;
+            position: absolute; width: 24px; height: 24px;
+            background-color: rgb(255, 0, 0); color: white;
             border-radius: 50%; display: flex; align-items: center;
-            justify-content: center; font-size: 16px; font-weight: bold;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.7); border: 2px solid #b91c1c;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: default;
-            user-select: none; transform: translate(-50%, -50%); z-index: 10;
+            justify-content: center; font-size: 14px; font-weight: bold;
+            cursor: default; user-select: none; 
+            transform: translate(-50%, -50%); z-index: 10;
+            border: 2px solid white; box-shadow: 0 0 0 1px red;
         }
         /* Style for the new remove button */
         .remove-balloon-btn {
@@ -101,11 +101,16 @@
                 <!-- ... (Viewer HTML is the same, with zoom controls) ... -->
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold">Document Viewer</h2>
-                    <div id="zoom-controls" class="hidden items-center space-x-2">
-                        <button id="zoom-out-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">-</button>
-                        <span id="zoom-level" class="text-sm font-medium w-16 text-center">150%</span>
-                        <button id="zoom-in-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">+</button>
-                        <button id="zoom-reset-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">Reset</button>
+                    <div class="flex items-center space-x-4">
+                        <div id="zoom-controls" class="hidden items-center space-x-2">
+                            <button id="zoom-out-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">-</button>
+                            <span id="zoom-level" class="text-sm font-medium w-16 text-center">150%</span>
+                            <button id="zoom-in-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">+</button>
+                            <button id="zoom-reset-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">Reset Zoom</button>
+                        </div>
+                        <button id="reset-labels-btn" class="px-4 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md shadow-sm hover:bg-red-100">
+                            Reset Labels
+                        </button>
                     </div>
                 </div>
                 <div class="bg-white p-4 rounded-lg shadow-md">
@@ -177,11 +182,95 @@
 
         // --- STATE VARIABLES ---
         let sourceFile = null;
-        let balloonCounter = 1;
         let ocrData = null;
         let pdfDoc = null;
         let pdfScale = 1.5;
         let balloonData = [];
+
+        // Function to reorder and renumber all balloons
+        function reorderBalloons() {
+            // Sort balloon data by page and position
+            balloonData.sort((a, b) => {
+                if (a.page !== b.page) return a.page - b.page;
+                if (Math.abs(a.y - b.y) > 0.1) return a.y - b.y;
+                return a.x - b.x;
+            });
+
+            // Renumber all balloons sequentially
+            balloonData.forEach((data, index) => {
+                data.number = index + 1;
+            });
+
+            // Update UI
+            updateBalloonsUI();
+            updateTableUI();
+        }
+
+        // Function to update balloon markers in the viewer
+        function updateBalloonsUI() {
+            // Remove all existing balloon markers
+            document.querySelectorAll('.balloon').forEach(b => b.remove());
+            
+            // Recreate all balloon markers with new numbers
+            const canvases = viewer.querySelectorAll('canvas');
+            balloonData.forEach(data => {
+                const canvas = canvases[data.page - 1];
+                if (!canvas) return;
+
+                const balloon = document.createElement('div');
+                balloon.className = 'balloon';
+                balloon.textContent = data.number;
+                balloon.dataset.balloonNumber = data.number;
+                
+                balloon.style.left = `${data.x * canvas.width}px`;
+                balloon.style.top = `${data.y * canvas.height}px`;
+                viewer.appendChild(balloon);
+            });
+        }
+
+        // Function to update the report table
+        function updateTableUI() {
+            if (!reportTableBody) return;
+            
+            reportTableBody.innerHTML = '';
+            balloonData.forEach(data => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-4 py-2">${data.number}</td>
+                    <td class="px-4 py-2">${data.label}</td>
+                    <td class="px-4 py-2">${data.value || '-'}</td>
+                    <td class="px-4 py-2">
+                        <button class="text-red-600 hover:text-red-800" data-balloon-number="${data.number}">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                reportTableBody.appendChild(row);
+            });
+
+            // Show/hide results section based on whether we have data
+            if (balloonData.length > 0) {
+                resultsSection.classList.remove('hidden');
+            } else {
+                resultsSection.classList.add('hidden');
+            }
+        }
+
+        // Reset all labels function
+        function resetAllLabels() {
+            // Clear all balloon markers
+            document.querySelectorAll('.balloon').forEach(b => b.remove());
+            // Reset the balloon data array
+            balloonData = [];
+            // Clear the report table
+            if (reportTableBody) reportTableBody.innerHTML = '';
+            // Reset the balloon counter
+            balloonCounter = 1;
+            // Hide results section if it's visible
+            resultsSection.classList.add('hidden');
+        }
 
         // --- EVENT LISTENERS ---
         // Make sure elements exist before adding listeners
@@ -193,6 +282,16 @@
         if (downloadPdfBtn) downloadPdfBtn.addEventListener('click', downloadPdfWithBalloons);
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', downloadDocxReport);
         if (reportTableBody) reportTableBody.addEventListener('click', handleTableClick);
+        
+        // Add reset labels button listener
+        const resetLabelsBtn = document.getElementById('reset-labels-btn');
+        if (resetLabelsBtn) {
+            resetLabelsBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
+                    resetAllLabels();
+                }
+            });
+        }
 
 
         // --- CORE FUNCTIONS (handleFileSelect, renderPdf, renderAllPdfPages, changePdfScale are the same) ---
@@ -315,14 +414,13 @@
             const customLabel = prompt("Enter a label for this balloon:", clickedWord);
             if (!customLabel) return;
 
-            const balloonNumber = balloonCounter++;
             const canvas = event.target;
             const rect = canvas.getBoundingClientRect();
             
             const relativeX = (event.clientX - rect.left) / canvas.width;
             const relativeY = (event.clientY - rect.top) / canvas.height;
 
-            addBalloonDataToTable(customLabel, balloonNumber, { 
+            addBalloonDataToTable(customLabel, { 
                 page: parseInt(canvas.dataset.pageNum, 10), 
                 x: relativeX, 
                 y: relativeY 
@@ -354,7 +452,7 @@
             return null;
         }
 
-        async function addBalloonDataToTable(label, number, position) {
+        async function addBalloonDataToTable(label, position) {
             loaderText.textContent = `Finding value for "${label}"...`;
             loader.classList.remove('hidden');
 
@@ -368,37 +466,33 @@
                 
                 const data = await response.json();
                 
-                balloonData.push({ ...data, ...position, number });
+                // Add new balloon data without a number (it will be assigned during reordering)
+                balloonData.push({ ...data, ...position, label });
                 
-                const tr = document.createElement('tr');
-                // --- FEATURE 3: Add data-attribute to row and include remove button ---
-                tr.dataset.balloonNumber = number;
-                tr.innerHTML = `
-                    <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5; color:white;">${number}</div></td>
-                    <td class="px-4 py-3 font-medium">${data.parameter}</td>
-                    <td class="px-4 py-3">${data.value}</td>
-                    <td class="px-4 py-3 text-center">
-                        <button class="remove-balloon-btn text-red-500 hover:text-red-700" title="Remove item">&times;</button>
-                    </td>`;
-                reportTableBody.appendChild(tr);
+                // Reorder and renumber all balloons
+                reorderBalloons();
+                
                 resultsSection.classList.remove('hidden');
                 placeholderText.classList.add('hidden');
-                repositionBalloons();
 
             } catch (error) {
                 showError(`Could not get data for "${label}": ${error.message}`);
-                balloonCounter--; 
             } finally {
                 loader.classList.add('hidden');
             }
         }
 
-        // --- FEATURE 4: NEW function to handle remove clicks ---
+        // Handle remove button clicks in the table
         function handleTableClick(event) {
             if (event.target.classList.contains('remove-balloon-btn')) {
                 const row = event.target.closest('tr');
                 const numberToRemove = parseInt(row.dataset.balloonNumber, 10);
                 
+                // Remove the balloon data
+                balloonData = balloonData.filter(data => data.number !== numberToRemove);
+                
+                // Reorder and renumber remaining balloons
+                reorderBalloons();
                 // 1. Remove from data array
                 balloonData = balloonData.filter(b => b.number !== numberToRemove);
                 
