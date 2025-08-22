@@ -10,7 +10,7 @@
     <!-- PDF.js for rendering PDFs -->
     <script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
     
-    <!-- pdf-lib for drawing balloons on the downloaded PDF -->
+    <!-- pdf-lib for drawing balloons on the downloaded PDF entirely in the browser -->
     <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
 
     <style>
@@ -19,25 +19,27 @@
             position: relative; background: #f3f4f6; border: 1px solid #d1d5db;
             overflow: auto; height: 80vh;
         }
-        #viewer canvas, #viewer img {
+        #viewer canvas {
             display: block; margin: 0 auto 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: crosshair;
         }
         .balloon {
             /* --- FEATURE 2: NEW STYLING --- */
             position: absolute;
             width: 32px;
             height: 32px;
-            background-color: rgba(239, 68, 68, 0.2); /* Semi-transparent red */
-            color: #b91c1c; /* Darker red for text */
+            background-color: rgba(239, 68, 68, 0.5); /* Semi-transparent red */
+            color: white; /* White text for contrast */
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 16px; /* Larger, more visible number */
             font-weight: bold;
-            border: 2px solid #ef4444; /* Solid red border */
+            text-shadow: 0 1px 2px rgba(0,0,0,0.7); /* Shadow to make number pop */
+            border: 2px solid #b91c1c; /* Darker red border */
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            cursor: pointer;
+            cursor: default; /* Change cursor to show it's not clickable */
             user-select: none;
             transform: translate(-50%, -50%);
             z-index: 10;
@@ -60,7 +62,7 @@
                     <!-- --- FEATURE 1: ZOOM CONTROLS --- -->
                     <div id="zoom-controls" class="hidden items-center space-x-2">
                         <button id="zoom-out-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">-</button>
-                        <span id="zoom-level" class="text-sm">100%</span>
+                        <span id="zoom-level" class="text-sm font-medium w-16 text-center">150%</span>
                         <button id="zoom-in-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">+</button>
                         <button id="zoom-reset-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">Reset</button>
                     </div>
@@ -68,7 +70,7 @@
                 <div class="bg-white p-4 rounded-lg shadow-md">
                     <input type="file" id="source-file-input" class="mb-4 block w-full text-sm text-gray-500
                         file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold
-                        file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".pdf,.docx">
+                        file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".pdf">
                     <div id="viewer-container" class="rounded-lg">
                         <div id="viewer"></div>
                     </div>
@@ -84,7 +86,7 @@
                             <h3 class="text-xl font-semibold">Ballooned Items</h3>
                             <div>
                                 <!-- --- FEATURE 3: DOWNLOAD PDF BUTTON --- -->
-                                <button id="download-pdf-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 mr-2">Download PDF</button>
+                                <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
                                 <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download .docx</button>
                             </div>
                         </div>
@@ -106,7 +108,7 @@
                          <p id="loader-text" class="mt-2 text-gray-600">Processing document...</p>
                     </div>
                     <div id="error-message" class="hidden text-center p-4 bg-red-100 text-red-700 rounded-lg"></div>
-                    <div id="placeholder-text" class="text-center text-gray-500 py-8"><p>Upload a document to begin.</p></div>
+                    <div id="placeholder-text" class="text-center text-gray-500 py-8"><p>Upload a PDF document to begin.</p></div>
                 </div>
             </div>
         </div>
@@ -158,13 +160,11 @@
             // Reset UI
             viewer.innerHTML = ''; reportTableBody.innerHTML = '';
             document.querySelectorAll('.balloon').forEach(b => b.remove());
-            ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; pdfScale = 1.5;
+            ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
             resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
             errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
             loader.classList.remove('hidden');
 
-            const isDocx = sourceFile.name.endsWith('.docx');
-            
             try {
                 const formData = new FormData();
                 formData.append('sourceFile', sourceFile);
@@ -176,16 +176,8 @@
                 ocrData = data.ocr_results;
                 console.log("OCR data received and cached.");
 
-                if (isDocx) {
-                    zoomControls.classList.add('hidden');
-                    // We need the backend to convert DOCX to PDF to render and draw on it
-                    // This is a placeholder for that logic. For now, we'll just show an image.
-                    alert("DOCX rendering is a preview. PDF download is not yet supported for DOCX uploads.");
-                    await renderDocxAsImages(data.page_count);
-                } else {
-                    zoomControls.classList.remove('hidden');
-                    await renderPdf(sourceFile, pdfScale);
-                }
+                zoomControls.classList.remove('hidden');
+                await renderPdf(sourceFile, pdfScale);
             } catch (error) {
                 showError(`Initialization failed: ${error.message}`);
             } finally {
@@ -224,11 +216,12 @@
         }
 
         function changePdfScale(amount, reset = false) {
+            if (!pdfDoc) return;
             if (reset) {
                 pdfScale = 1.5;
             } else {
                 pdfScale += amount;
-                if (pdfScale < 0.25) pdfScale = 0.25;
+                if (pdfScale < 0.5) pdfScale = 0.5; // Set a min zoom
             }
             renderAllPdfPages(pdfScale);
         }
@@ -249,25 +242,19 @@
                 // Convert stored relative coordinates to new absolute position
                 balloon.style.left = `${data.x * canvas.width}px`;
                 balloon.style.top = `${data.y * canvas.height}px`;
-                viewerContainer.appendChild(balloon);
+                viewer.appendChild(balloon); // Append to viewer for correct absolute positioning
             });
         }
 
         function handleViewerClick(event) {
-            if (!ocrData || !pdfDoc) {
-                alert("Please upload and process a PDF file first to enable ballooning.");
-                return;
-            }
-
-            const targetCanvas = event.target;
-            if (targetCanvas.tagName !== 'CANVAS') return;
+            if (!ocrData || !pdfDoc) return;
+            if (event.target.tagName !== 'CANVAS') return;
 
             const clickedWord = findWordAtClick(event);
             if (!clickedWord) return;
 
-            // --- FEATURE 4: CUSTOM LABEL PROMPT ---
             const customLabel = prompt("Enter a label for this balloon:", clickedWord);
-            if (!customLabel) return; // User cancelled
+            if (!customLabel) return;
 
             const balloonNumber = balloonCounter++;
             const canvas = event.target;
@@ -291,9 +278,12 @@
             if (!pageOcrData) return null;
             
             const rect = targetCanvas.getBoundingClientRect();
-            const scale = pdfScale;
-            const clickX = (event.clientX - rect.left) / scale;
-            const clickY = (event.clientY - rect.top) / scale;
+            const originalWidth = pageOcrData.width;
+            const renderedWidth = targetCanvas.width;
+            const scale = originalWidth / renderedWidth;
+
+            const clickX = (event.clientX - rect.left) * scale;
+            const clickY = (event.clientY - rect.top) * scale;
 
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
@@ -318,10 +308,8 @@
                 
                 const data = await response.json();
                 
-                // Add to central data store
                 balloonData.push({ ...data, ...position, number });
-
-                // Add to UI table
+                
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5; color:white;">${number}</div></td>
@@ -330,56 +318,42 @@
                 reportTableBody.appendChild(tr);
                 resultsSection.classList.remove('hidden');
                 placeholderText.classList.add('hidden');
-                repositionBalloons(); // Redraw all balloons
+                repositionBalloons();
 
             } catch (error) {
                 showError(`Could not get data for "${label}": ${error.message}`);
-                balloonCounter--; // Decrement counter on failure
+                balloonCounter--; 
             } finally {
                 loader.classList.add('hidden');
             }
         }
 
         async function downloadPdfWithBalloons() {
-            if (!pdfDoc) {
-                alert("PDF download is only available for uploaded PDF files.");
-                return;
-            }
-            loaderText.textContent = 'Preparing PDF download...';
+            if (!pdfDoc) return;
+            if (balloonData.length === 0) { showError("No balloons to add."); return; }
+
+            loaderText.textContent = 'Generating ballooned PDF...';
             loader.classList.remove('hidden');
             
             try {
-                const { PDFDocument, rgb } = PDFLib;
+                const { PDFDocument, rgb, StandardFonts } = PDFLib;
                 const existingPdfBytes = await sourceFile.arrayBuffer();
                 const pdfDocToModify = await PDFDocument.load(existingPdfBytes);
                 const pages = pdfDocToModify.getPages();
+                const font = await pdfDocToModify.embedFont(StandardFonts.HelveticaBold);
 
                 for (const data of balloonData) {
                     const page = pages[data.page - 1];
                     const { width, height } = page.getSize();
                     
-                    // Convert relative canvas coordinates back to PDF point coordinates
                     const x = data.x * width;
-                    const y = height - (data.y * height); // PDF coordinates are from bottom-left
+                    const y = height - (data.y * height);
                     
-                    // Draw circle
-                    page.drawCircle({
-                        x: x,
-                        y: y,
-                        size: 16,
-                        borderColor: rgb(0.9, 0, 0),
-                        borderWidth: 1.5,
-                        color: rgb(1, 0, 0),
-                        opacity: 0.2,
-                        borderOpacity: 1,
-                    });
-                    // Draw text
-                    page.drawText(String(data.number), {
-                        x: x - 4, // Adjust text position to center it
-                        y: y - 4,
-                        size: 10,
-                        color: rgb(0.5, 0, 0),
-                    });
+                    page.drawCircle({ x, y, size: 16, borderColor: rgb(0.9, 0, 0), borderWidth: 1.5, color: rgb(1, 0, 0), opacity: 0.2 });
+                    
+                    const text = String(data.number);
+                    const textWidth = font.widthOfTextAtSize(text, 10);
+                    page.drawText(text, { x: x - textWidth / 2, y: y - 4, size: 10, font, color: rgb(0.5, 0, 0) });
                 }
 
                 const pdfBytes = await pdfDocToModify.save();
@@ -401,11 +375,7 @@
         }
         
         async function downloadDocxReport() {
-            // This function now uses the centralized balloonData
-            if (balloonData.length === 0) {
-                showError("No items have been ballooned yet.");
-                return;
-            }
+            if (balloonData.length === 0) { showError("No items have been ballooned yet."); return; }
 
             const reportData = {
                 header: { "Report Type": "Ballooned Inspection Report", "Source File": sourceFile.name },
@@ -415,14 +385,35 @@
                 }
             };
             
-            // ... The rest of the download logic is the same ...
+            loaderText.textContent = 'Generating DOCX file...';
+            loader.classList.remove('hidden');
+            downloadDocxBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${backendUrlBase}/export-docx`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reportData),
+                });
+                if (!response.ok) throw new Error((await response.json()).error);
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'ballooned_report.docx';
+                document.body.appendChild(a); a.click();
+                URL.revokeObjectURL(url); a.remove();
+            } catch (error) {
+                showError(`Could not download file: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+                downloadDocxBtn.disabled = false;
+            }
         }
 
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.classList.remove('hidden');
         }
-
     </script>
 </body>
 </html>
