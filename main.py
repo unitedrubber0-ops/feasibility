@@ -245,6 +245,7 @@ def get_page_as_image_handler(page_num):
 def get_value_for_label_handler():
     """
     Receives a document and a specific label, and returns the value for that label.
+    This is a fast, targeted endpoint for the ballooning feature.
     """
     if 'sourceFile' not in request.files or 'label' not in request.form:
         return jsonify({"error": "Missing source file or label"}), 400
@@ -254,16 +255,9 @@ def get_value_for_label_handler():
 
     try:
         source_stream = io.BytesIO(source_file.read())
-        source_text = ""
-        if source_file.filename.endswith('.pdf'):
-            # For this targeted task, we don't need page-by-page
-            pdf_reader = PyPDF2.PdfReader(source_stream)
-            for page in pdf_reader.pages:
-                source_text += page.extract_text() or ""
-        elif source_file.filename.endswith('.docx'):
-            source_text = extract_text_from_docx(source_stream)
-        else:
-            source_text = source_stream.read().decode('utf-8', errors='ignore')
+        doc = fitz.open(stream=source_stream, filetype=source_file.filename.split('.')[-1])
+        source_text = "".join([page.get_text() for page in doc])
+        doc.close()
 
         if not source_text:
             return jsonify({"error": "Could not extract text from source file."}), 500
@@ -272,13 +266,10 @@ def get_value_for_label_handler():
         return jsonify({"error": f"Failed to process file: {e}"}), 500
 
     try:
-        # Initialize your model as before (safety settings, etc.)
-        # You can use a faster model like gemini-flash for this simple task
-        safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
-        generation_config = genai.GenerationConfig(max_output_tokens=8192, temperature=0.1)
-        model = genai.GenerativeModel("gemini-1.5-flash-preview-0514", generation_config=generation_config, safety_settings=safety_settings) 
+        # --- THIS IS THE FIX ---
+        # Using the latest, stable model name for Gemini Flash.
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
-        # A new, highly-focused prompt for the ballooning task
         prompt = f"""
         You are a data extraction specialist. In the following DOCUMENT TEXT, find the label "{label}" and return its corresponding value.
 
@@ -293,13 +284,15 @@ def get_value_for_label_handler():
         - "value" should be the numerical or text value associated with that label (e.g., "24.6").
         """
 
+        # We can reuse the robust retry function you already have
         response_text = generate_with_retry(model, prompt)
         response_json = json.loads(response_text)
         
         return jsonify(response_json)
 
     except Exception as e:
-        return jsonify({"error": f"AI processing failed: {e}"}), 500
+        print(f"An error occurred during AI processing for label '{label}': {e}")
+        return jsonify({"error": f"AI processing failed: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
