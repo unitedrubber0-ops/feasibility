@@ -568,10 +568,13 @@
                 
                 const data = await response.json();
                 ocrData = data.ocr_results;
-                console.log("OCR data structure:", {
+                console.log("OCR data loaded:", {
                     pageCount: ocrData.length,
-                    samplePage: ocrData[0],
-                    sampleWords: ocrData[0]?.words.slice(0, 5)
+                    totalWords: ocrData.reduce((sum, page) => sum + page.words.length, 0),
+                    sampleWords: ocrData[0]?.words.slice(0, 5).map(w => ({
+                        text: w.text,
+                        coords: `(${Math.round(w.bbox[0])},${Math.round(w.bbox[1])}) to (${Math.round(w.bbox[2])},${Math.round(w.bbox[3])})`
+                    }))
                 });
 
                 zoomControls.classList.remove('hidden');
@@ -685,10 +688,18 @@
             }
 
             const wordInfo = findWordAtClick(event);
-            console.log('Found word:', wordInfo);
+            console.log('Found word:', wordInfo ? {
+                text: wordInfo.text,
+                bbox: wordInfo.bbox,
+                coords: `(${wordInfo.bbox[0]},${wordInfo.bbox[1]}) to (${wordInfo.bbox[2]},${wordInfo.bbox[3]})`
+            } : null);
             if (!wordInfo) return;
 
-            console.log('Word clicked:', wordInfo); // Debug log
+            console.log('Word clicked:', {
+                text: wordInfo.text,
+                bbox: wordInfo.bbox,
+                coords: `(${wordInfo.bbox[0]},${wordInfo.bbox[1]}) to (${wordInfo.bbox[2]},${wordInfo.bbox[3]})`
+            });
             
             // Check if the text is a measurement or GD&T feature control frame
             const isGDTFeature = isFeatureControlFrame(wordInfo.text);
@@ -735,11 +746,18 @@
 
                 console.log('Processing value:', {
                     label: customLabel,
-                    value,
+                    originalText: wordInfo.text,
+                    processedValue: value,
                     type: isGDTFeature ? 'GDT' : 
                           /^[Pp]\d+$/.test(wordInfo.text) ? 'Position' :
                           /^\d+[Xx×]\d*$/.test(wordInfo.text) ? 'Dimension' :
-                          'Measurement'
+                          'Measurement',
+                    matched: {
+                        isGDTFeature,
+                        isPosition: /^[Pp]\d+$/.test(wordInfo.text),
+                        isDimension: /^\d+[Xx×]\d*$/.test(wordInfo.text),
+                        isSimpleMeasurement: numericMatch !== null
+                    }
                 });
             } else {
                 // For non-numbers, use existing behavior
@@ -821,14 +839,33 @@
             let closestMatch = null;
             let minDistance = Infinity;
 
-            console.log('Looking through words:', pageOcrData.words.length);
-            
+            console.log('Looking through words:', {
+                total: pageOcrData.words.length,
+                clickLocation: `(${Math.round(clickX)},${Math.round(clickY)})`,
+                canvasSize: `${Math.round(originalWidth)}x${Math.round(originalHeight)}`
+            });
+
+            // First pass: Look for words that contain the click point
             for (const item of pageOcrData.words) {
-                // Debug log every 100th word to avoid console spam
+                const [x0, y0, x1, y1] = item.bbox;
+                
+                // If the click is inside a word's bounds, use it immediately
+                if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
+                    console.log('Direct hit on word:', {
+                        text: item.text,
+                        coords: `(${Math.round(x0)},${Math.round(y0)}) to (${Math.round(x1)},${Math.round(y1)})`
+                    });
+                    return item;
+                }
+            }
+
+            // Second pass: Find closest word if no direct hit
+            for (const item of pageOcrData.words) {
+                // Log sample words for debugging
                 if (pageOcrData.words.indexOf(item) % 100 === 0) {
                     console.log('Sample word:', {
                         text: item.text,
-                        bbox: item.bbox
+                        coords: `(${Math.round(item.bbox[0])},${Math.round(item.bbox[1])}) to (${Math.round(item.bbox[2])},${Math.round(item.bbox[3])})`
                     });
                 }
                 // Get word bounds
@@ -843,9 +880,10 @@
                 if (distance < 50) {
                     console.log('Near word:', {
                         text: item.text,
-                        distance,
-                        bounds: [x0, y0, x1, y1],
-                        click: [clickX, clickY]
+                        distance: Math.round(distance * 100) / 100,
+                        bounds: `(${Math.round(x0)},${Math.round(y0)}) to (${Math.round(x1)},${Math.round(y1)})`,
+                        click: `(${Math.round(clickX)},${Math.round(clickY)})`,
+                        matchQuality: distance < 20 ? 'Good' : 'Fair'
                     });
                 }
 
