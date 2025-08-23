@@ -15,6 +15,159 @@
     
     <!-- Initialize libraries -->
     <script>
+        // GD&T Symbol detection and parsing functions
+        const GDT_SYMBOLS = {
+            // Form Controls
+            STRAIGHTNESS: '⏤',
+            FLATNESS: '□',
+            CIRCULARITY: '○',
+            CYLINDRICITY: '⌭',
+            
+            // Orientation Controls
+            ANGULARITY: '∠',
+            PERPENDICULARITY: '⊥',
+            PARALLELISM: '∥',
+            
+            // Location Controls
+            POSITION: '⌖',
+            CONCENTRICITY: '◎',
+            SYMMETRY: '⌯',
+            
+            // Profile Controls
+            PROFILE_LINE: '⌒',
+            PROFILE_SURFACE: '⌓',
+            
+            // Runout Controls
+            CIRCULAR_RUNOUT: '↗',
+            TOTAL_RUNOUT: '↗↗',
+            
+            // Common Modifiers
+            DIAMETER: 'Ø',
+            SPHERICAL_DIAMETER: 'S⌀',
+            MMC: '(M)',
+            LMC: '(L)',
+            FREE_STATE: '(F)',
+            ALL_AROUND: '⃝',
+            PROJECTED: '⎕'
+        };
+
+        function isGDTSymbol(text) {
+            return Object.values(GDT_SYMBOLS).some(symbol => text.includes(symbol));
+        }
+
+        function getSymbolType(text) {
+            for (const [type, symbol] of Object.entries(GDT_SYMBOLS)) {
+                if (text.includes(symbol)) return type;
+            }
+            return null;
+        }
+
+        function isModifier(text) {
+            return text.match(/\([MLF]\)/) || text === GDT_SYMBOLS.ALL_AROUND || text === GDT_SYMBOLS.PROJECTED;
+        }
+
+        function hasDiameterSymbol(text) {
+            return text.includes(GDT_SYMBOLS.DIAMETER) || text.includes(GDT_SYMBOLS.SPHERICAL_DIAMETER);
+        }
+
+        function hasMMC(text) {
+            return text.includes(GDT_SYMBOLS.MMC);
+        }
+
+        function hasLMC(text) {
+            return text.includes(GDT_SYMBOLS.LMC);
+        }
+
+        function hasFreeState(text) {
+            return text.includes(GDT_SYMBOLS.FREE_STATE);
+        }
+
+        function isDatumReference(text) {
+            // Match single letters that might be datum references with optional material condition
+            return /^[A-Z](?:\([MLF]\))?$/.test(text.trim());
+        }
+
+        function isCompositeToleranceIndicator(text) {
+            // Match composite tolerance indicators like "⌖⌖" or "∥∥"
+            return /^(.)\1+$/.test(text) && isGDTSymbol(text[0]);
+        }
+
+        function hasToleranceValue(text) {
+            // Match numeric values with optional diameter symbol and material condition
+            return /^(?:Ø|S⌀)?\d+(?:\.\d+)?(?:\([MLF]\))?$/.test(text.trim());
+        }
+
+        function parseFeatureControlFrame(text) {
+            const parts = text.split(/\s+/);
+            const result = {
+                geometricCharacteristic: null,
+                toleranceValue: null,
+                modifiers: [],
+                datumReferences: [],
+                isComposite: false
+            };
+
+            parts.forEach(part => {
+                if (isGDTSymbol(part)) {
+                    if (isCompositeToleranceIndicator(part)) {
+                        result.isComposite = true;
+                        result.geometricCharacteristic = getSymbolType(part[0]);
+                    } else {
+                        result.geometricCharacteristic = getSymbolType(part);
+                    }
+                } else if (hasToleranceValue(part)) {
+                    const match = part.match(/^(?:Ø|S⌀)?(\d+(?:\.\d+)?)/);
+                    if (match) {
+                        result.toleranceValue = parseFloat(match[1]);
+                        if (hasDiameterSymbol(part)) {
+                            result.modifiers.push('DIAMETER');
+                        }
+                        if (hasMMC(part)) {
+                            result.modifiers.push('MMC');
+                        }
+                        if (hasLMC(part)) {
+                            result.modifiers.push('LMC');
+                        }
+                        if (hasFreeState(part)) {
+                            result.modifiers.push('FREE_STATE');
+                        }
+                    }
+                } else if (isDatumReference(part)) {
+                    const datumRef = {
+                        letter: part[0],
+                        modifier: null
+                    };
+                    if (part.includes('(M)')) datumRef.modifier = 'MMC';
+                    if (part.includes('(L)')) datumRef.modifier = 'LMC';
+                    if (part.includes('(F)')) datumRef.modifier = 'FREE_STATE';
+                    result.datumReferences.push(datumRef);
+                } else if (isModifier(part)) {
+                    if (part === GDT_SYMBOLS.ALL_AROUND) {
+                        result.modifiers.push('ALL_AROUND');
+                    }
+                    if (part === GDT_SYMBOLS.PROJECTED) {
+                        result.modifiers.push('PROJECTED');
+                    }
+                }
+            });
+
+            return result;
+        }
+
+        function isFeatureControlFrame(text) {
+            const parts = text.trim().split(/\s+/);
+            // Check if text starts with a GD&T symbol and contains required elements
+            return isGDTSymbol(parts[0]) && 
+                   parts.some(p => hasToleranceValue(p)) &&
+                   (parts.some(p => isDatumReference(p)) || !requiresDatum(getSymbolType(parts[0])));
+        }
+
+        function requiresDatum(symbolType) {
+            // Form controls don't require datum references
+            const formControls = ['STRAIGHTNESS', 'FLATNESS', 'CIRCULARITY', 'CYLINDRICITY'];
+            return !formControls.includes(symbolType);
+        }
+
         window.initializePdfLibraries = async function() {
             const maxAttempts = 10;
             const delayBetweenAttempts = 200;
@@ -117,6 +270,10 @@
                             <button id="zoom-in-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">+</button>
                             <button id="zoom-reset-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">Reset Zoom</button>
                         </div>
+                        <div id="orientation-controls" class="hidden items-center space-x-2">
+                            <button id="portrait-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-50 active:bg-gray-100">Portrait</button>
+                            <button id="landscape-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-50 active:bg-gray-100">Landscape</button>
+                        </div>
                         <button id="reset-labels-btn" class="px-4 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md shadow-sm hover:bg-red-100">
                             Reset Labels
                         </button>
@@ -188,6 +345,9 @@
         const zoomInBtn = document.getElementById('zoom-in-btn');
         const zoomResetBtn = document.getElementById('zoom-reset-btn');
         const zoomLevel = document.getElementById('zoom-level');
+        const orientationControls = document.getElementById('orientation-controls');
+        const portraitBtn = document.getElementById('portrait-btn');
+        const landscapeBtn = document.getElementById('landscape-btn');
 
         // --- STATE VARIABLES ---
         let sourceFile = null;
@@ -195,6 +355,8 @@
         let pdfDoc = null;
         let pdfScale = 1.5;
         let balloonData = [];
+        let currentRotation = 0; // 0 for portrait, 90 for landscape
+        let currentPage = null;
 
         // Function to reorder and renumber all balloons
         function reorderBalloons() {
@@ -361,6 +523,10 @@
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', downloadDocxReport);
         if (reportTableBody) reportTableBody.addEventListener('click', handleTableClick);
         
+        // Add orientation control event listeners
+        if (portraitBtn) portraitBtn.addEventListener('click', () => setOrientation('portrait'));
+        if (landscapeBtn) landscapeBtn.addEventListener('click', () => setOrientation('landscape'));
+        
         // Add reset labels button listener
         const resetLabelsBtn = document.getElementById('reset-labels-btn');
         if (resetLabelsBtn) {
@@ -381,9 +547,17 @@
             viewer.innerHTML = ''; reportTableBody.innerHTML = '';
             document.querySelectorAll('.balloon').forEach(b => b.remove());
             ocrData = null; pdfDoc = null; balloonData = []; changePdfScale(0, true);
+            currentRotation = 0; // Reset orientation to portrait
             resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
             errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
             loader.classList.remove('hidden');
+            
+            // Show zoom and orientation controls
+            zoomControls.classList.remove('hidden');
+            orientationControls.classList.remove('hidden');
+            orientationControls.style.display = 'flex';
+            portraitBtn.classList.add('bg-blue-100');
+            landscapeBtn.classList.remove('bg-blue-100');
 
             try {
                 const formData = new FormData();
@@ -433,12 +607,23 @@
             }
         }
         
+        async function setOrientation(orientation) {
+            currentRotation = orientation === 'portrait' ? 0 : 90;
+            await renderAllPdfPages(pdfScale);
+            // Update active state of buttons
+            portraitBtn.classList.toggle('bg-blue-100', orientation === 'portrait');
+            landscapeBtn.classList.toggle('bg-blue-100', orientation === 'landscape');
+        }
+
         async function renderAllPdfPages(scale) {
             viewer.innerHTML = ''; // Clear previous render
             zoomLevel.textContent = `${Math.round(scale * 100)}%`;
+            
             for (let i = 1; i <= pdfDoc.numPages; i++) {
                 const page = await pdfDoc.getPage(i);
-                const viewport = page.getViewport({ scale });
+                
+                // Apply rotation and scale
+                const viewport = page.getViewport({ scale, rotation: currentRotation });
                 const canvas = document.createElement('canvas');
                 canvas.dataset.pageNum = i;
                 const context = canvas.getContext('2d');
@@ -489,16 +674,20 @@
             const wordInfo = findWordAtClick(event);
             if (!wordInfo) return;
 
-            // Check if the text is a number (with optional brackets and/or tolerance)
-            const numericMatch = wordInfo.text.match(/^\s*\(?\s*(\d*\.?\d+)\s*(±\s*\d*\.?\d+)?\s*\)?\s*$/);
-            const isNumeric = numericMatch !== null;
+            // Check if the text is a measurement (including GD&T callouts)
+            const isGDTCallout = wordInfo.text.includes('⊕') || wordInfo.text.includes('Ⓜ');
+            const numericMatch = wordInfo.text.match(/^\s*[⌀Ø]?\s*\(?\s*(\d*\.?\d+)\s*(±\s*\d*\.?\d+)?\s*\)?\s*$/);
+            const isNumeric = numericMatch !== null || isGDTCallout;
             
             let customLabel, value;
             if (isNumeric) {
-                // For numbers, ask for parameter name and use the full text (preserving brackets if present)
-                customLabel = prompt("Enter a parameter name for this measurement:", "");
+                // For measurements and GD&T callouts, ask for feature name
+                const promptText = wordInfo.text.includes('⊕') || wordInfo.text.includes('Ⓜ') 
+                    ? "Enter a name for this GD&T feature control:"
+                    : "Enter a parameter name for this measurement:";
+                customLabel = prompt(promptText, "");
                 if (!customLabel) return;
-                value = wordInfo.text.trim(); // Keep brackets if they exist
+                value = wordInfo.text.trim(); // Keep all symbols and formatting
             } else {
                 // For non-numbers, use existing behavior
                 customLabel = prompt("Enter a label for this balloon:", wordInfo.text);
@@ -532,23 +721,176 @@
             });
         }
 
-         function findWordAtClick(event) {
+        function getTextBounds(text, bbox) {
+            return {
+                text: text,
+                bbox: bbox
+            };
+        }
+
+        function findWordAtClick(event) {
             const targetCanvas = event.target;
             const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
             const pageOcrData = ocrData.find(p => p.page === pageNum);
             if (!pageOcrData) return null;
             
             const rect = targetCanvas.getBoundingClientRect();
-            // Use the stored pdfScale for accurate calculations
             const originalWidth = pageOcrData.width;
             const renderedWidth = targetCanvas.width;
-            // The true scale is based on the original OCR data, not just the render scale
             const scale = originalWidth / renderedWidth;
 
             const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
             const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
+            
+            // Get the closest word or feature control frame at the click coordinates
+            let closestMatch = null;
+            let minDistance = Infinity;
 
-            // First, check for a number with brackets and/or tolerance
+            for (const item of pageOcrData.words) {
+                // Check if the click point is within or very close to the word bounds
+                const dx = Math.max(item.bbox.x0 - clickX, 0, clickX - item.bbox.x1);
+                const dy = Math.max(item.bbox.y0 - clickY, 0, clickY - item.bbox.y1);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Update closest match if this is the closest word so far
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestMatch = item;
+                }
+
+                // If we're inside a word's bounds or very close (within 5 pixels), use it
+                if (distance < 5) {
+                    // If this is part of a feature control frame, expand selection
+                    if (isFeatureControlFrame(item.text) || isDatumReference(item.text)) {
+                        // Look for adjacent items that might be part of the same feature control frame
+                        const frame = findCompleteFeatureControlFrame(pageOcrData.words, item);
+                        if (frame) {
+                            return frame;
+                        }
+                    }
+                    return item;
+                }
+            }
+
+            // If we didn't find anything very close, but have a closest match within reasonable distance
+            if (closestMatch && minDistance < 20) {
+                return closestMatch;
+            }
+
+            return null;
+        }
+
+        function formatGDTFrame(parsedFrame) {
+            const parts = [];
+            
+            // Add geometric characteristic symbol
+            if (parsedFrame.geometricCharacteristic) {
+                const symbol = GDT_SYMBOLS[parsedFrame.geometricCharacteristic];
+                parts.push(parsedFrame.isComposite ? symbol + symbol : symbol);
+            }
+            
+            // Add tolerance value with modifiers
+            if (parsedFrame.toleranceValue !== null) {
+                let value = '';
+                if (parsedFrame.modifiers.includes('DIAMETER')) {
+                    value += GDT_SYMBOLS.DIAMETER;
+                }
+                value += parsedFrame.toleranceValue;
+                
+                // Add material condition or free state
+                if (parsedFrame.modifiers.includes('MMC')) {
+                    value += GDT_SYMBOLS.MMC;
+                } else if (parsedFrame.modifiers.includes('LMC')) {
+                    value += GDT_SYMBOLS.LMC;
+                } else if (parsedFrame.modifiers.includes('FREE_STATE')) {
+                    value += GDT_SYMBOLS.FREE_STATE;
+                }
+                
+                parts.push(value);
+            }
+            
+            // Add datum references
+            if (parsedFrame.datumReferences.length > 0) {
+                const datumRefs = parsedFrame.datumReferences.map(ref => {
+                    let datumText = ref.letter;
+                    if (ref.modifier === 'MMC') datumText += GDT_SYMBOLS.MMC;
+                    else if (ref.modifier === 'LMC') datumText += GDT_SYMBOLS.LMC;
+                    else if (ref.modifier === 'FREE_STATE') datumText += GDT_SYMBOLS.FREE_STATE;
+                    return datumText;
+                });
+                parts.push(...datumRefs);
+            }
+            
+            // Add remaining modifiers
+            if (parsedFrame.modifiers.includes('ALL_AROUND')) {
+                parts.push(GDT_SYMBOLS.ALL_AROUND);
+            }
+            if (parsedFrame.modifiers.includes('PROJECTED')) {
+                parts.push(GDT_SYMBOLS.PROJECTED);
+            }
+            
+            return parts.join(' ');
+        }
+
+        function findCompleteFeatureControlFrame(words, startItem) {
+            // Get bounds of potential frame items
+            const startBounds = startItem.bbox;
+            const frame = {
+                text: startItem.text,
+                bbox: { ...startBounds }
+            };
+
+            // Look for items that might be part of the same frame
+            // (close horizontally and vertically)
+            const relatedItems = words.filter(word => {
+                if (word === startItem) return false;
+                
+                const wordBounds = word.bbox;
+                const verticalOverlap = !(wordBounds.y1 < startBounds.y0 || wordBounds.y0 > startBounds.y1);
+                const horizontalDistance = Math.min(
+                    Math.abs(wordBounds.x0 - startBounds.x1),
+                    Math.abs(wordBounds.x1 - startBounds.x0)
+                );
+                
+                return verticalOverlap && horizontalDistance < 20;
+            });
+
+            // Sort related items by x position
+            relatedItems.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+
+            // Combine items into a single frame if they form a valid GD&T expression
+            for (const item of relatedItems) {
+                const combinedText = `${frame.text} ${item.text}`;
+                if (isValidGDTExpression(combinedText)) {
+                    frame.text = combinedText;
+                    frame.bbox = {
+                        x0: Math.min(frame.bbox.x0, item.bbox.x0),
+                        y0: Math.min(frame.bbox.y0, item.bbox.y0),
+                        x1: Math.max(frame.bbox.x1, item.bbox.x1),
+                        y1: Math.max(frame.bbox.y1, item.bbox.y1)
+                    };
+                }
+            }
+
+            return frame.text !== startItem.text ? frame : startItem;
+        }
+
+        function isValidGDTExpression(text) {
+            // Check if the text forms a valid GD&T expression
+            const parts = text.trim().split(/\s+/);
+            
+            // Must start with position symbol
+            if (!isPositionSymbol(parts[0])) return false;
+            
+            // Must contain diameter with material condition
+            if (!parts.some(p => hasDiameterSymbol(p) && hasMaterialCondition(p))) return false;
+            
+            // Must contain at least one datum reference
+            if (!parts.some(p => isDatumReference(p))) return false;
+            
+            return true;
+        }
+
             for (let i = 0; i < pageOcrData.words.length; i++) {
                 const word = pageOcrData.words[i];
                 const [x0, y0, x1, y1] = word.bbox;
@@ -557,53 +899,111 @@
                     let fullText = word.text;
                     let extendedX0 = x0;
                     let extendedX1 = x1;
-                    
-                    // Check if this word is a number
-                    if (!isNaN(parseFloat(word.text))) {
-                        let hasChanges = false;
+                    let hasChanges = false;
+
+                    // Check for GD&T feature control frame
+                    if (hasGDTSymbol(word.text)) {
+                        let gdt = {
+                            symbols: [word.text],
+                            datums: [],
+                            boundary: null,
+                            value: null,
+                            x0: x0,
+                            x1: x1
+                        };
                         
-                        // Check for brackets
-                        if (i > 0 && pageOcrData.words[i-1].text.trim() === '(' &&
-                            i < pageOcrData.words.length - 1 && pageOcrData.words[i+1].text.trim() === ')') {
-                            fullText = `(${word.text})`;
-                            extendedX0 = pageOcrData.words[i-1].bbox[0];
-                            extendedX1 = pageOcrData.words[i+1].bbox[2];
-                            hasChanges = true;
-                        }
-                        
-                        // Check for ± tolerance in next words
-                        let j = hasChanges ? i + 2 : i + 1; // Skip closing bracket if we found brackets
-                        
-                        // Check next word(s) for ± symbol and tolerance value
+                        // Look ahead for the complete feature control frame
+                        let j = i + 1;
                         while (j < pageOcrData.words.length) {
                             const nextWord = pageOcrData.words[j].text.trim();
                             
-                            // Check for ± symbol
-                            if (nextWord === '±' || nextWord.includes('±')) {
-                                // Look for the tolerance number
-                                if (j + 1 < pageOcrData.words.length && !isNaN(parseFloat(pageOcrData.words[j+1].text))) {
-                                    // Include both ± and the tolerance number
-                                    fullText = hasChanges ? 
-                                        fullText.slice(0, -1) + ` ±${pageOcrData.words[j+1].text})` :
-                                        `${fullText} ±${pageOcrData.words[j+1].text}`;
-                                    extendedX1 = pageOcrData.words[j+1].bbox[2];
-                                    break;
-                                } else if (!isNaN(parseFloat(nextWord.replace('±', '')))) {
-                                    // ± and number are together
-                                    fullText = hasChanges ?
-                                        fullText.slice(0, -1) + ` ${nextWord})` :
-                                        `${fullText} ${nextWord}`;
-                                    extendedX1 = pageOcrData.words[j].bbox[2];
-                                    break;
-                                }
-                            } else if (!nextWord.match(/^[,\s]*$/)) {
-                                // Stop if we hit any non-whitespace, non-comma word
+                            if (hasGDTSymbol(nextWord)) {
+                                gdt.symbols.push(nextWord);
+                                gdt.x1 = pageOcrData.words[j].bbox[2];
+                            } else if (isDatumReference(nextWord)) {
+                                gdt.datums.push(nextWord);
+                                gdt.x1 = pageOcrData.words[j].bbox[2];
+                            } else if (isBoundaryReference(nextWord)) {
+                                gdt.boundary = nextWord;
+                                gdt.x1 = pageOcrData.words[j].bbox[2];
+                            } else if (!isNaN(parseFloat(nextWord.replace('Ø', '')))) {
+                                gdt.value = nextWord;
+                                gdt.x1 = pageOcrData.words[j].bbox[2];
+                            } else if (nextWord.match(/^[,\s]*$/)) {
+                                // Skip whitespace and commas
+                                j++;
+                                continue;
+                            } else {
                                 break;
                             }
                             j++;
                         }
+                        
+                        if (gdt.value || gdt.datums.length > 0) {
+                            // Format the GD&T callout
+                            let parts = [];
+                            if (gdt.value) parts.push(gdt.value);
+                            if (gdt.symbols.length > 0) parts.push(gdt.symbols.join(' '));
+                            if (gdt.datums.length > 0) parts.push(gdt.datums.join(', '));
+                            if (gdt.boundary) parts.push(gdt.boundary);
+                            
+                            fullText = parts.join(' ');
+                            extendedX0 = gdt.x0;
+                            extendedX1 = gdt.x1;
+                            i = j - 1;
+                            hasChanges = true;
+                        }
                     }
-                    
+                    // Handle diameter symbol cases
+                    else if (i > 0 && hasDiameterSymbol(pageOcrData.words[i-1].text) && 
+                        !isNaN(parseFloat(word.text))) {
+                        fullText = '⌀' + word.text;
+                        extendedX0 = pageOcrData.words[i-1].bbox[0];
+                        hasChanges = true;
+                    } else if (hasDiameterSymbol(word.text) && 
+                             i < pageOcrData.words.length - 1 && 
+                             !isNaN(parseFloat(pageOcrData.words[i+1].text))) {
+                        fullText = '⌀' + pageOcrData.words[i+1].text;
+                        extendedX1 = pageOcrData.words[i+1].bbox[2];
+                        i++;
+                        hasChanges = true;
+                    }
+
+                    // Process brackets and tolerances only if we have a number
+                    if (!isNaN(parseFloat(fullText.replace('⌀', '').replace('Ø', '')))) {
+                        // Check for brackets
+                        if (!hasChanges && i > 0 && pageOcrData.words[i-1].text.trim() === '(' &&
+                            i < pageOcrData.words.length - 1 && pageOcrData.words[i+1].text.trim() === ')') {
+                            fullText = `(${fullText})`;
+                            extendedX0 = Math.min(extendedX0, pageOcrData.words[i-1].bbox[0]);
+                            extendedX1 = pageOcrData.words[i+1].bbox[2];
+                            i++;
+                            hasChanges = true;
+                        }
+
+                        // Check for tolerances (±)
+                        let nextIndex = i + 1;
+                        while (nextIndex < pageOcrData.words.length) {
+                            const nextWord = pageOcrData.words[nextIndex].text.trim();
+                            
+                            if (nextWord === '±' || nextWord.includes('±')) {
+                                if (nextIndex + 1 < pageOcrData.words.length && 
+                                    !isNaN(parseFloat(pageOcrData.words[nextIndex+1].text))) {
+                                    fullText = `${fullText} ±${pageOcrData.words[nextIndex+1].text}`;
+                                    extendedX1 = pageOcrData.words[nextIndex+1].bbox[2];
+                                    break;
+                                } else if (!isNaN(parseFloat(nextWord.replace('±', '')))) {
+                                    fullText = `${fullText} ${nextWord}`;
+                                    extendedX1 = pageOcrData.words[nextIndex].bbox[2];
+                                    break;
+                                }
+                            } else if (!nextWord.match(/^[,\s]*$/)) {
+                                break;
+                            }
+                            nextIndex++;
+                        }
+                    }
+
                     return {
                         text: fullText,
                         bbox: [extendedX0, y0, extendedX1, y1]
