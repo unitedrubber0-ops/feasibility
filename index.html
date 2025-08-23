@@ -363,32 +363,24 @@
             // Diameter symbols
             'Ø': '⌀',
             '∅': '⌀',
-            'O/': '⌀',
-            'o/': '⌀',
-            '0/': '⌀',
             
             // Plus/minus symbols
             '±': '±',
-            '+/-': '±',
-            '+-': '±',
             
             // Position and geometric symbols
             '⊥': '⊥',
-            '_|_': '⊥',
-            '|_': '⊥',
             
             // Feature control frame symbols
             '⊕': '⊕',
-            '(+)': '⊕',
-            '(O)': '⊕',
-            'O-': '⊕',
             
             // Material condition symbols
-            'Ⓜ': 'Ⓜ',
-            '(M)': 'Ⓜ',
-            '@M': 'Ⓜ',
-            '@m': 'Ⓜ'
+            'Ⓜ': 'Ⓜ'
         };
+
+        // Function to escape regex special characters
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
 
         // Function to normalize OCR text with special symbols
         function normalizeOCRText(text) {
@@ -397,7 +389,7 @@
             // First pass: direct symbol replacements
             let normalized = text;
             for (const [pattern, replacement] of Object.entries(SYMBOL_MAPPINGS)) {
-                normalized = normalized.replace(new RegExp(pattern, 'g'), replacement);
+                normalized = normalized.replace(new RegExp(escapeRegex(pattern), 'g'), replacement);
             }
             
             // Second pass: handle combined patterns
@@ -406,12 +398,16 @@
                 .replace(/(?:O|0|o|Ø|∅)\/?\s*(\d)/g, '⌀$1')
                 // Handle plus/minus variations
                 .replace(/\+\s*\/\s*-/g, '±')
+                .replace(/\+\s*-/g, '±')
                 // Handle material condition indicators
-                .replace(/@\s*M/gi, 'Ⓜ')
-                .replace(/\(M\)/gi, 'Ⓜ')
+                .replace(/@\s*[Mm]/g, 'Ⓜ')
+                .replace(/\([Mm]\)/g, 'Ⓜ')
                 // Handle position symbol variations
-                .replace(/_\|_/g, '⊥')
-                .replace(/\|_/g, '⊥');
+                .replace(/_\s*\|\s*_/g, '⊥')
+                .replace(/\|\s*_/g, '⊥')
+                // Handle feature control frame variations
+                .replace(/\(\s*[oO0]\s*\)/g, '⊕')
+                .replace(/[oO0]\s*-/g, '⊕');
             
             return normalized;
         }
