@@ -15,159 +15,6 @@
     
     <!-- Initialize libraries -->
     <script>
-        // GD&T Symbol detection and parsing functions
-        const GDT_SYMBOLS = {
-            // Form Controls
-            STRAIGHTNESS: '⏤',
-            FLATNESS: '□',
-            CIRCULARITY: '○',
-            CYLINDRICITY: '⌭',
-            
-            // Orientation Controls
-            ANGULARITY: '∠',
-            PERPENDICULARITY: '⊥',
-            PARALLELISM: '∥',
-            
-            // Location Controls
-            POSITION: '⌖',
-            CONCENTRICITY: '◎',
-            SYMMETRY: '⌯',
-            
-            // Profile Controls
-            PROFILE_LINE: '⌒',
-            PROFILE_SURFACE: '⌓',
-            
-            // Runout Controls
-            CIRCULAR_RUNOUT: '↗',
-            TOTAL_RUNOUT: '↗↗',
-            
-            // Common Modifiers
-            DIAMETER: 'Ø',
-            SPHERICAL_DIAMETER: 'S⌀',
-            MMC: '(M)',
-            LMC: '(L)',
-            FREE_STATE: '(F)',
-            ALL_AROUND: '⃝',
-            PROJECTED: '⎕'
-        };
-
-        function isGDTSymbol(text) {
-            return Object.values(GDT_SYMBOLS).some(symbol => text.includes(symbol));
-        }
-
-        function getSymbolType(text) {
-            for (const [type, symbol] of Object.entries(GDT_SYMBOLS)) {
-                if (text.includes(symbol)) return type;
-            }
-            return null;
-        }
-
-        function isModifier(text) {
-            return text.match(/\([MLF]\)/) || text === GDT_SYMBOLS.ALL_AROUND || text === GDT_SYMBOLS.PROJECTED;
-        }
-
-        function hasDiameterSymbol(text) {
-            return text.includes(GDT_SYMBOLS.DIAMETER) || text.includes(GDT_SYMBOLS.SPHERICAL_DIAMETER);
-        }
-
-        function hasMMC(text) {
-            return text.includes(GDT_SYMBOLS.MMC);
-        }
-
-        function hasLMC(text) {
-            return text.includes(GDT_SYMBOLS.LMC);
-        }
-
-        function hasFreeState(text) {
-            return text.includes(GDT_SYMBOLS.FREE_STATE);
-        }
-
-        function isDatumReference(text) {
-            // Match single letters that might be datum references with optional material condition
-            return /^[A-Z](?:\([MLF]\))?$/.test(text.trim());
-        }
-
-        function isCompositeToleranceIndicator(text) {
-            // Match composite tolerance indicators like "⌖⌖" or "∥∥"
-            return /^(.)\1+$/.test(text) && isGDTSymbol(text[0]);
-        }
-
-        function hasToleranceValue(text) {
-            // Match numeric values with optional diameter symbol and material condition
-            return /^(?:Ø|S⌀)?\d+(?:\.\d+)?(?:\([MLF]\))?$/.test(text.trim());
-        }
-
-        function parseFeatureControlFrame(text) {
-            const parts = text.split(/\s+/);
-            const result = {
-                geometricCharacteristic: null,
-                toleranceValue: null,
-                modifiers: [],
-                datumReferences: [],
-                isComposite: false
-            };
-
-            parts.forEach(part => {
-                if (isGDTSymbol(part)) {
-                    if (isCompositeToleranceIndicator(part)) {
-                        result.isComposite = true;
-                        result.geometricCharacteristic = getSymbolType(part[0]);
-                    } else {
-                        result.geometricCharacteristic = getSymbolType(part);
-                    }
-                } else if (hasToleranceValue(part)) {
-                    const match = part.match(/^(?:Ø|S⌀)?(\d+(?:\.\d+)?)/);
-                    if (match) {
-                        result.toleranceValue = parseFloat(match[1]);
-                        if (hasDiameterSymbol(part)) {
-                            result.modifiers.push('DIAMETER');
-                        }
-                        if (hasMMC(part)) {
-                            result.modifiers.push('MMC');
-                        }
-                        if (hasLMC(part)) {
-                            result.modifiers.push('LMC');
-                        }
-                        if (hasFreeState(part)) {
-                            result.modifiers.push('FREE_STATE');
-                        }
-                    }
-                } else if (isDatumReference(part)) {
-                    const datumRef = {
-                        letter: part[0],
-                        modifier: null
-                    };
-                    if (part.includes('(M)')) datumRef.modifier = 'MMC';
-                    if (part.includes('(L)')) datumRef.modifier = 'LMC';
-                    if (part.includes('(F)')) datumRef.modifier = 'FREE_STATE';
-                    result.datumReferences.push(datumRef);
-                } else if (isModifier(part)) {
-                    if (part === GDT_SYMBOLS.ALL_AROUND) {
-                        result.modifiers.push('ALL_AROUND');
-                    }
-                    if (part === GDT_SYMBOLS.PROJECTED) {
-                        result.modifiers.push('PROJECTED');
-                    }
-                }
-            });
-
-            return result;
-        }
-
-        function isFeatureControlFrame(text) {
-            const parts = text.trim().split(/\s+/);
-            // Check if text starts with a GD&T symbol and contains required elements
-            return isGDTSymbol(parts[0]) && 
-                   parts.some(p => hasToleranceValue(p)) &&
-                   (parts.some(p => isDatumReference(p)) || !requiresDatum(getSymbolType(parts[0])));
-        }
-
-        function requiresDatum(symbolType) {
-            // Form controls don't require datum references
-            const formControls = ['STRAIGHTNESS', 'FLATNESS', 'CIRCULARITY', 'CYLINDRICITY'];
-            return !formControls.includes(symbolType);
-        }
-
         window.initializePdfLibraries = async function() {
             const maxAttempts = 10;
             const delayBetweenAttempts = 200;
@@ -225,21 +72,12 @@
         }
         .balloon {
             position: absolute; width: 24px; height: 24px;
-            background-color: transparent; color: red;
+            background-color: rgb(255, 0, 0); color: white;
             border-radius: 50%; display: flex; align-items: center;
             justify-content: center; font-size: 14px; font-weight: bold;
-            cursor: grab; user-select: none; 
+            cursor: default; user-select: none; 
             transform: translate(-50%, -50%); z-index: 10;
-            border: 2px solid red;
-            transition: box-shadow 0.2s ease;
-        }
-        .balloon:hover {
-            box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.2);
-        }
-        .balloon.dragging {
-            cursor: grabbing;
-            box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.3);
-            z-index: 20;
+            border: 2px solid white; box-shadow: 0 0 0 1px red;
         }
         /* Style for the new remove button */
         .remove-balloon-btn {
@@ -269,10 +107,6 @@
                             <span id="zoom-level" class="text-sm font-medium w-16 text-center">150%</span>
                             <button id="zoom-in-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">+</button>
                             <button id="zoom-reset-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">Reset Zoom</button>
-                        </div>
-                        <div id="orientation-controls" class="hidden items-center space-x-2">
-                            <button id="portrait-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-50 active:bg-gray-100">Portrait</button>
-                            <button id="landscape-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-50 active:bg-gray-100">Landscape</button>
                         </div>
                         <button id="reset-labels-btn" class="px-4 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md shadow-sm hover:bg-red-100">
                             Reset Labels
@@ -345,228 +179,14 @@
         const zoomInBtn = document.getElementById('zoom-in-btn');
         const zoomResetBtn = document.getElementById('zoom-reset-btn');
         const zoomLevel = document.getElementById('zoom-level');
-        const orientationControls = document.getElementById('orientation-controls');
-        const portraitBtn = document.getElementById('portrait-btn');
-        const landscapeBtn = document.getElementById('landscape-btn');
 
         // --- STATE VARIABLES ---
         let sourceFile = null;
+        let balloonCounter = 1;
         let ocrData = null;
         let pdfDoc = null;
         let pdfScale = 1.5;
         let balloonData = [];
-        let currentRotation = 0; // 0 for portrait, 90 for landscape
-        let currentPage = null;
-
-        // Symbol normalization constants
-        const SYMBOL_MAPPINGS = {
-            // Diameter symbols
-            'Ø': '⌀',
-            '∅': '⌀',
-            
-            // Plus/minus symbols
-            '±': '±',
-            
-            // Position and geometric symbols
-            '⊥': '⊥',
-            
-            // Feature control frame symbols
-            '⊕': '⊕',
-            
-            // Material condition symbols
-            'Ⓜ': 'Ⓜ'
-        };
-
-        // Function to escape regex special characters
-        function escapeRegex(string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        }
-
-        // Function to normalize OCR text with special symbols
-        function normalizeOCRText(text) {
-            if (!text) return text;
-            
-            // First pass: direct symbol replacements
-            let normalized = text;
-            for (const [pattern, replacement] of Object.entries(SYMBOL_MAPPINGS)) {
-                normalized = normalized.replace(new RegExp(escapeRegex(pattern), 'g'), replacement);
-            }
-            
-            // Second pass: handle combined patterns
-            normalized = normalized
-                // Handle diameter followed by number
-                .replace(/(?:O|0|o|Ø|∅)\/?\s*(\d)/g, '⌀$1')
-                // Handle plus/minus variations
-                .replace(/\+\s*\/\s*-/g, '±')
-                .replace(/\+\s*-/g, '±')
-                // Handle material condition indicators
-                .replace(/@\s*[Mm]/g, 'Ⓜ')
-                .replace(/\([Mm]\)/g, 'Ⓜ')
-                // Handle position symbol variations
-                .replace(/_\s*\|\s*_/g, '⊥')
-                .replace(/\|\s*_/g, '⊥')
-                // Handle feature control frame variations
-                .replace(/\(\s*[oO0]\s*\)/g, '⊕')
-                .replace(/[oO0]\s*-/g, '⊕');
-            
-            return normalized;
-        }
-
-        // Function to process OCR data and normalize symbols
-        function processOCRData(data) {
-            if (!data || !Array.isArray(data)) return data;
-            
-            return data.map(page => ({
-                ...page,
-                words: page.words.map(word => ({
-                    ...word,
-                    text: normalizeOCRText(word.text),
-                    originalText: word.text // preserve original for debugging
-                }))
-            }));
-        }
-
-        // Function to reorder and renumber all balloons
-        function reorderBalloons() {
-            // If this is a new balloon being added, give it the next number
-            const nextNumber = balloonData.length;
-            const newBalloon = balloonData[balloonData.length - 1];
-            if (newBalloon && !newBalloon.number) {
-                newBalloon.number = nextNumber;
-            }
-            
-            // For removed balloons, we don't need to sort, just renumber sequentially
-            if (balloonData.length > 0) {
-                // Maintain the existing order and just fix any gaps in numbering
-                balloonData.sort((a, b) => a.number - b.number);
-                balloonData.forEach((data, index) => {
-                    data.number = index + 1;
-                });
-            }
-
-            // Update UI
-            updateBalloonsUI();
-            updateTableUI();
-        }
-
-        // Function to update balloon markers in the viewer
-        function updateBalloonsUI() {
-            // Remove all existing balloon markers
-            document.querySelectorAll('.balloon').forEach(b => b.remove());
-            
-            // Recreate all balloon markers with new numbers
-            const canvases = viewer.querySelectorAll('canvas');
-            balloonData.forEach(data => {
-                const canvas = canvases[data.page - 1];
-                if (!canvas) return;
-
-                const balloon = document.createElement('div');
-                balloon.className = 'balloon';
-                balloon.textContent = data.number;
-                balloon.dataset.balloonNumber = data.number;
-                balloon.dataset.pageNum = data.page;
-                
-                balloon.style.left = `${data.x * canvas.width}px`;
-                balloon.style.top = `${data.y * canvas.height}px`;
-                
-                // Add drag functionality
-                balloon.draggable = true;
-                balloon.addEventListener('dragstart', handleDragStart);
-                balloon.addEventListener('drag', handleDrag);
-                balloon.addEventListener('dragend', handleDragEnd);
-                
-                viewer.appendChild(balloon);
-            });
-        }
-
-        // Drag handling functions
-        function handleDragStart(e) {
-            this.classList.add('dragging');
-            // Store the initial mouse offset from the balloon's top-left corner
-            const rect = this.getBoundingClientRect();
-            e.dataTransfer.setData('text/plain', ''); // Required for Firefox
-            e.dataTransfer.effectAllowed = 'move';
-            this.dataset.offsetX = e.clientX - rect.left;
-            this.dataset.offsetY = e.clientY - rect.top;
-        }
-
-        function handleDrag(e) {
-            if (!e.clientX) return; // Ignore invalid drag events
-            
-            const balloon = e.target;
-            const container = viewer;
-            const canvas = viewer.querySelector(`canvas[data-page-num="${balloon.dataset.pageNum}"]`);
-            if (!canvas) return;
-            
-            // Calculate new position
-            const containerRect = container.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
-            
-            // Get the position relative to the canvas
-            const offsetX = parseFloat(balloon.dataset.offsetX) || 0;
-            const offsetY = parseFloat(balloon.dataset.offsetY) || 0;
-            
-            const x = (e.clientX - canvasRect.left - offsetX) / canvas.width;
-            const y = (e.clientY - canvasRect.top - offsetY) / canvas.height;
-            
-            // Update balloon data
-            const balloonNumber = parseInt(balloon.dataset.balloonNumber);
-            const balloonIndex = balloonData.findIndex(b => b.number === balloonNumber);
-            if (balloonIndex >= 0) {
-                balloonData[balloonIndex].x = Math.max(0, Math.min(1, x));
-                balloonData[balloonIndex].y = Math.max(0, Math.min(1, y));
-            }
-            
-            // Update visual position
-            balloon.style.left = `${x * canvas.width}px`;
-            balloon.style.top = `${y * canvas.height}px`;
-        }
-
-        function handleDragEnd(e) {
-            this.classList.remove('dragging');
-            // Final position update
-            handleDrag(e);
-        }
-
-        // Add viewer container event listeners for drag and drop
-        viewer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        });
-
-        viewer.addEventListener('drop', (e) => {
-            e.preventDefault();
-        });
-
-        // Function to update the report table
-        function updateTableUI() {
-            if (!reportTableBody) return;
-            
-            reportTableBody.innerHTML = '';
-            balloonData.forEach(data => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="px-4 py-2">${data.number}</td>
-                    <td class="px-4 py-2">${data.label}</td>
-                    <td class="px-4 py-2">${data.value || '-'}</td>
-                    <td class="px-4 py-2 text-center">
-                        <button class="remove-balloon-btn text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50" data-balloon-number="${data.number}">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </button>
-                    </td>
-                `;
-                reportTableBody.appendChild(row);
-            });
-
-            // Show/hide results section based on whether we have data
-            if (balloonData.length > 0) {
-                resultsSection.classList.remove('hidden');
-            } else {
-                resultsSection.classList.add('hidden');
-            }
-        }
 
         // Reset all labels function
         function resetAllLabels() {
@@ -576,6 +196,8 @@
             balloonData = [];
             // Clear the report table
             if (reportTableBody) reportTableBody.innerHTML = '';
+            // Reset the balloon counter
+            balloonCounter = 1;
             // Hide results section if it's visible
             resultsSection.classList.add('hidden');
         }
@@ -590,10 +212,6 @@
         if (downloadPdfBtn) downloadPdfBtn.addEventListener('click', downloadPdfWithBalloons);
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', downloadDocxReport);
         if (reportTableBody) reportTableBody.addEventListener('click', handleTableClick);
-        
-        // Add orientation control event listeners
-        if (portraitBtn) portraitBtn.addEventListener('click', () => setOrientation('portrait'));
-        if (landscapeBtn) landscapeBtn.addEventListener('click', () => setOrientation('landscape'));
         
         // Add reset labels button listener
         const resetLabelsBtn = document.getElementById('reset-labels-btn');
@@ -614,18 +232,10 @@
             // Reset UI
             viewer.innerHTML = ''; reportTableBody.innerHTML = '';
             document.querySelectorAll('.balloon').forEach(b => b.remove());
-            ocrData = null; pdfDoc = null; balloonData = []; changePdfScale(0, true);
-            currentRotation = 0; // Reset orientation to portrait
+            ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
             resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
             errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
             loader.classList.remove('hidden');
-            
-            // Show zoom and orientation controls
-            zoomControls.classList.remove('hidden');
-            orientationControls.classList.remove('hidden');
-            orientationControls.style.display = 'flex';
-            portraitBtn.classList.add('bg-blue-100');
-            landscapeBtn.classList.remove('bg-blue-100');
 
             try {
                 const formData = new FormData();
@@ -635,20 +245,8 @@
                 if (!response.ok) throw new Error((await response.json()).error);
                 
                 const data = await response.json();
-                // Process and normalize OCR data
-                ocrData = processOCRData(data.ocr_results);
-                
-                // Log sample of processed data
-                console.log("OCR data loaded:", {
-                    pageCount: ocrData.length,
-                    totalWords: ocrData.reduce((sum, page) => sum + page.words.length, 0),
-                    sampleWords: ocrData[0]?.words.slice(0, 10).map(w => ({
-                        text: w.text,
-                        originalText: w.originalText,
-                        normalized: w.text !== w.originalText,
-                        coords: `(${Math.round(w.bbox[0])},${Math.round(w.bbox[1])}) to (${Math.round(w.bbox[2])},${Math.round(w.bbox[3])})`
-                    }))
-                });
+                ocrData = data.ocr_results;
+                console.log("OCR data received and cached.");
 
                 zoomControls.classList.remove('hidden');
                 await renderPdf(sourceFile, pdfScale);
@@ -687,23 +285,12 @@
             }
         }
         
-        async function setOrientation(orientation) {
-            currentRotation = orientation === 'portrait' ? 0 : 90;
-            await renderAllPdfPages(pdfScale);
-            // Update active state of buttons
-            portraitBtn.classList.toggle('bg-blue-100', orientation === 'portrait');
-            landscapeBtn.classList.toggle('bg-blue-100', orientation === 'landscape');
-        }
-
         async function renderAllPdfPages(scale) {
             viewer.innerHTML = ''; // Clear previous render
             zoomLevel.textContent = `${Math.round(scale * 100)}%`;
-            
             for (let i = 1; i <= pdfDoc.numPages; i++) {
                 const page = await pdfDoc.getPage(i);
-                
-                // Apply rotation and scale
-                const viewport = page.getViewport({ scale, rotation: currentRotation });
+                const viewport = page.getViewport({ scale });
                 const canvas = document.createElement('canvas');
                 canvas.dataset.pageNum = i;
                 const context = canvas.getContext('2d');
@@ -748,542 +335,55 @@
         }
         // ... (handleViewerClick and findWordAtClick are the same) ...
         function handleViewerClick(event) {
-            console.log('Click event:', event);
-            
-            if (!ocrData || !pdfDoc) {
-                console.log('Missing data:', { hasOcrData: !!ocrData, hasPdfDoc: !!pdfDoc });
-                return;
-            }
-            
-            if (event.target.tagName !== 'CANVAS') {
-                console.log('Click not on canvas:', event.target.tagName);
-                return;
-            }
+            if (!ocrData || !pdfDoc) return;
+            if (event.target.tagName !== 'CANVAS') return;
 
-            const wordInfo = findWordAtClick(event);
-            console.log('Found word:', wordInfo ? {
-                text: wordInfo.text,
-                bbox: wordInfo.bbox,
-                coords: `(${wordInfo.bbox[0]},${wordInfo.bbox[1]}) to (${wordInfo.bbox[2]},${wordInfo.bbox[3]})`
-            } : null);
-            if (!wordInfo) return;
+            const clickedWord = findWordAtClick(event);
+            if (!clickedWord) return;
 
-            console.log('Word clicked:', {
-                text: wordInfo.text,
-                bbox: wordInfo.bbox,
-                coords: `(${wordInfo.bbox[0]},${wordInfo.bbox[1]}) to (${wordInfo.bbox[2]},${wordInfo.bbox[3]})`
-            });
-            
-            // Check if the text is a measurement or GD&T feature control frame
-            const isGDTFeature = isFeatureControlFrame(wordInfo.text);
-            
-            // Check for special text patterns
-            const isLabel = /^[A-Z]+$/.test(wordInfo.text) && wordInfo.text.length > 1; // Multi-letter uppercase words are labels
-            const isPositionMarker = /^[Pp]\d+$/.test(wordInfo.text);
-            const isDimension = /^\d+[Xx×]\d*$/.test(wordInfo.text);
-            
-            // Enhanced pattern to match more numeric formats
-            const numericMatch = wordInfo.text.match(/^[⌀Ø]?\s*\(?(\d+\.?\d*|\.\d+)(?:[Xx×]?\d*\.?\d*)?\s*(±\s*\d*\.?\d*)?\)?$/);
-            
-            const isNumeric = numericMatch !== null || 
-                            isGDTFeature || 
-                            isDimension ||
-                            isPositionMarker;
-            
-            console.log('Text analysis:', {
-                text: wordInfo.text,
-                isLabel,
-                isGDTFeature,
-                isPositionMarker,
-                isDimension,
-                numericMatch,
-                isNumeric
-            });
-            
-            // Check for existing balloon at this location
-            const existingBalloon = balloonData.find(b => 
-                Math.abs(b.x - clickX / pageOcrData.width) < 0.02 && 
-                Math.abs(b.y - clickY / pageOcrData.height) < 0.02
-            );
-            
-            if (existingBalloon) {
-                console.log('Balloon already exists at this location:', existingBalloon);
-                return;
-            }
+            const customLabel = prompt("Enter a label for this balloon:", clickedWord);
+            if (!customLabel) return;
 
-            let customLabel, value;
-            if (isNumeric) {
-                // Handle text based on its type
-                // Determine how to handle the clicked text
-                if (isLabel) {
-                    // For label text (like "INSIDE"), use it as the label
-                    customLabel = wordInfo.text;
-                    value = null;
-                } else {
-                    // For measurements and features, prompt for a name
-                    let promptText;
-                    let defaultValue = "";
-                    
-                    if (isGDTFeature) {
-                        promptText = "Enter a name for this GD&T feature control:";
-                    } else if (isPositionMarker) {
-                        promptText = `Enter a name for position ${wordInfo.text}:`;
-                        defaultValue = `Position ${wordInfo.text}`;
-                    } else if (isDimension) {
-                        promptText = "Enter a name for this dimension:";
-                        defaultValue = `Dimension ${wordInfo.text}`;
-                    } else {
-                        promptText = "Enter a parameter name for this measurement:";
-                    }
-
-                    // Show the prompt with appropriate default value
-                    customLabel = prompt(promptText, defaultValue);
-                }
-                if (!customLabel) return;
-
-                // Process the value based on its type
-                if (isGDTFeature) {
-                    const parsedFrame = parseFeatureControlFrame(wordInfo.text);
-                    value = formatGDTFrame(parsedFrame);
-                } else {
-                    value = wordInfo.text.trim(); // Keep all symbols and formatting
-                }
-
-                console.log('Processing value:', {
-                    label: customLabel,
-                    originalText: wordInfo.text,
-                    processedValue: value,
-                    type: isGDTFeature ? 'GDT' : 
-                          /^[Pp]\d+$/.test(wordInfo.text) ? 'Position' :
-                          /^\d+[Xx×]\d*$/.test(wordInfo.text) ? 'Dimension' :
-                          'Measurement',
-                    matched: {
-                        isGDTFeature,
-                        isPosition: /^[Pp]\d+$/.test(wordInfo.text),
-                        isDimension: /^\d+[Xx×]\d*$/.test(wordInfo.text),
-                        isSimpleMeasurement: numericMatch !== null
-                    }
-                });
-            } else {
-                // For non-numbers, use existing behavior
-                customLabel = prompt("Enter a label for this balloon:", wordInfo.text);
-                if (!customLabel) return;
-                value = null;
-            }
-
+            const balloonNumber = balloonCounter++;
             const canvas = event.target;
-            const pageOcrData = ocrData.find(p => p.page === parseInt(canvas.dataset.pageNum, 10));
+            const rect = canvas.getBoundingClientRect();
             
-            // Calculate the position for the balloon
-            // Position it to the right of the word
-            const [x0, y0, x1, y1] = wordInfo.bbox;
-            const relativeX = (x1 / pageOcrData.width) + 0.02; // Add a small offset to the right
-            const relativeY = ((y0 + y1) / 2) / pageOcrData.height; // Vertically center with the word
-            
-            // If it's a numeric value, we'll handle it differently
-            if (isNumeric) {
-                addBalloonDataWithValue(customLabel, value, {
-                    page: parseInt(canvas.dataset.pageNum, 10),
-                    x: relativeX,
-                    y: relativeY
-                });
-                return;
-            }
+            const relativeX = (event.clientX - rect.left) / canvas.width;
+            const relativeY = (event.clientY - rect.top) / canvas.height;
 
-            addBalloonDataToTable(customLabel, { 
+            addBalloonDataToTable(customLabel, balloonNumber, { 
                 page: parseInt(canvas.dataset.pageNum, 10), 
                 x: relativeX, 
                 y: relativeY 
             });
         }
 
-        function getTextBounds(text, bbox) {
-            return {
-                text: text,
-                bbox: bbox
-            };
-        }
-
-        function findWordAtClick(event) {
+         function findWordAtClick(event) {
             const targetCanvas = event.target;
             const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
             const pageOcrData = ocrData.find(p => p.page === pageNum);
             if (!pageOcrData) return null;
             
             const rect = targetCanvas.getBoundingClientRect();
+            // Use the stored pdfScale for accurate calculations
             const originalWidth = pageOcrData.width;
-            const originalHeight = pageOcrData.height;
             const renderedWidth = targetCanvas.width;
-            const renderedHeight = targetCanvas.height;
+            // The true scale is based on the original OCR data, not just the render scale
+            const scale = originalWidth / renderedWidth;
 
-            console.log('Canvas dimensions:', {
-                originalWidth,
-                originalHeight,
-                renderedWidth,
-                renderedHeight,
-                rect
-            });
+            const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
+            const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
 
-            // Calculate click coordinates in the original PDF space
-            const scaleX = originalWidth / renderedWidth;
-            const scaleY = originalHeight / renderedHeight;
-            
-            const clickX = (event.clientX - rect.left) * scaleX;
-            const clickY = (event.clientY - rect.top) * scaleY;
-
-            console.log('Click coordinates:', {
-                clientX: event.clientX,
-                clientY: event.clientY,
-                rectLeft: rect.left,
-                rectTop: rect.top,
-                calculatedX: clickX,
-                calculatedY: clickY
-            });
-            
-            // Get the closest word or feature control frame at the click coordinates
-            let closestMatch = null;
-            let minDistance = Infinity;
-
-            console.log('Looking through words:', {
-                total: pageOcrData.words.length,
-                clickLocation: `(${Math.round(clickX)},${Math.round(clickY)})`,
-                canvasSize: `${Math.round(originalWidth)}x${Math.round(originalHeight)}`
-            });
-
-            // First pass: Look for words that contain the click point
-            for (const item of pageOcrData.words) {
-                const [x0, y0, x1, y1] = item.bbox;
-                
-                // If the click is inside a word's bounds, use it immediately
-                if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
-                    console.log('Direct hit on word:', {
-                        text: item.text,
-                        coords: `(${Math.round(x0)},${Math.round(y0)}) to (${Math.round(x1)},${Math.round(y1)})`
-                    });
-                    return item;
-                }
-            }
-
-            // Second pass: Find closest word if no direct hit
-            for (const item of pageOcrData.words) {
-                // Log sample words for debugging
-                if (pageOcrData.words.indexOf(item) % 100 === 0) {
-                    console.log('Sample word:', {
-                        text: item.text,
-                        coords: `(${Math.round(item.bbox[0])},${Math.round(item.bbox[1])}) to (${Math.round(item.bbox[2])},${Math.round(item.bbox[3])})`
-                    });
-                }
-                // Get word bounds
-                const [x0, y0, x1, y1] = item.bbox;
-                
-                // Check if the click point is within or very close to the word bounds
-                const dx = Math.max(x0 - clickX, 0, clickX - x1);
-                const dy = Math.max(y0 - clickY, 0, clickY - y1);
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                // Debug log if we're close to a word
-                if (distance < 50) {
-                    console.log('Near word:', {
-                        text: item.text,
-                        distance: Math.round(distance * 100) / 100,
-                        bounds: `(${Math.round(x0)},${Math.round(y0)}) to (${Math.round(x1)},${Math.round(y1)})`,
-                        click: `(${Math.round(clickX)},${Math.round(clickY)})`,
-                        matchQuality: distance < 20 ? 'Good' : 'Fair'
-                    });
-                }
-
-                // Update closest match if this is the closest word so far
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestMatch = item;
-                }
-
-                // Update closest match if this word is closer than previous matches
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestMatch = item;
-                }
-
-                // If we're inside a word's bounds or very close (within 20 pixels), use it immediately
-                if (distance < 20) {
-                    console.log('Found match:', item);
-                    // If this is part of a feature control frame, expand selection
-                    if (isFeatureControlFrame(item.text) || isDatumReference(item.text)) {
-                        // Look for adjacent items that might be part of the same feature control frame
-                        const frame = findCompleteFeatureControlFrame(pageOcrData.words, item);
-                        if (frame) {
-                            console.log('Found complete frame:', frame);
-                            return frame;
-                        }
-                    }
-                    return item;
-                }
-            }
-
-            // If we didn't find anything very close, but have a closest match within reasonable distance
-            if (closestMatch && minDistance < 20) {
-                return closestMatch;
-            }
-
-            return null;
-        }
-
-        function formatGDTFrame(parsedFrame) {
-            const parts = [];
-            
-            // Add geometric characteristic symbol
-            if (parsedFrame.geometricCharacteristic) {
-                const symbol = GDT_SYMBOLS[parsedFrame.geometricCharacteristic];
-                parts.push(parsedFrame.isComposite ? symbol + symbol : symbol);
-            }
-            
-            // Add tolerance value with modifiers
-            if (parsedFrame.toleranceValue !== null) {
-                let value = '';
-                if (parsedFrame.modifiers.includes('DIAMETER')) {
-                    value += GDT_SYMBOLS.DIAMETER;
-                }
-                value += parsedFrame.toleranceValue;
-                
-                // Add material condition or free state
-                if (parsedFrame.modifiers.includes('MMC')) {
-                    value += GDT_SYMBOLS.MMC;
-                } else if (parsedFrame.modifiers.includes('LMC')) {
-                    value += GDT_SYMBOLS.LMC;
-                } else if (parsedFrame.modifiers.includes('FREE_STATE')) {
-                    value += GDT_SYMBOLS.FREE_STATE;
-                }
-                
-                parts.push(value);
-            }
-            
-            // Add datum references
-            if (parsedFrame.datumReferences.length > 0) {
-                const datumRefs = parsedFrame.datumReferences.map(ref => {
-                    let datumText = ref.letter;
-                    if (ref.modifier === 'MMC') datumText += GDT_SYMBOLS.MMC;
-                    else if (ref.modifier === 'LMC') datumText += GDT_SYMBOLS.LMC;
-                    else if (ref.modifier === 'FREE_STATE') datumText += GDT_SYMBOLS.FREE_STATE;
-                    return datumText;
-                });
-                parts.push(...datumRefs);
-            }
-            
-            // Add remaining modifiers
-            if (parsedFrame.modifiers.includes('ALL_AROUND')) {
-                parts.push(GDT_SYMBOLS.ALL_AROUND);
-            }
-            if (parsedFrame.modifiers.includes('PROJECTED')) {
-                parts.push(GDT_SYMBOLS.PROJECTED);
-            }
-            
-            return parts.join(' ');
-        }
-
-        function findCompleteFeatureControlFrame(words, startItem) {
-            // Get bounds of potential frame items
-            const startBounds = startItem.bbox;
-            const frame = {
-                text: startItem.text,
-                bbox: { ...startBounds }
-            };
-
-            // Look for items that might be part of the same frame
-            // (close horizontally and vertically)
-            const relatedItems = words.filter(word => {
-                if (word === startItem) return false;
-                
-                const wordBounds = word.bbox;
-                const verticalOverlap = !(wordBounds.y1 < startBounds.y0 || wordBounds.y0 > startBounds.y1);
-                const horizontalDistance = Math.min(
-                    Math.abs(wordBounds.x0 - startBounds.x1),
-                    Math.abs(wordBounds.x1 - startBounds.x0)
-                );
-                
-                return verticalOverlap && horizontalDistance < 20;
-            });
-
-            // Sort related items by x position
-            relatedItems.sort((a, b) => a.bbox.x0 - b.bbox.x0);
-
-            // Combine items into a single frame if they form a valid GD&T expression
-            for (const item of relatedItems) {
-                const combinedText = `${frame.text} ${item.text}`;
-                if (isValidGDTExpression(combinedText)) {
-                    frame.text = combinedText;
-                    frame.bbox = {
-                        x0: Math.min(frame.bbox.x0, item.bbox.x0),
-                        y0: Math.min(frame.bbox.y0, item.bbox.y0),
-                        x1: Math.max(frame.bbox.x1, item.bbox.x1),
-                        y1: Math.max(frame.bbox.y1, item.bbox.y1)
-                    };
-                }
-            }
-
-            return frame.text !== startItem.text ? frame : startItem;
-        }
-
-        function isValidGDTExpression(text) {
-            // Check if the text forms a valid GD&T expression
-            const parts = text.trim().split(/\s+/);
-            
-            // Must start with position symbol
-            if (!isPositionSymbol(parts[0])) return false;
-            
-            // Must contain diameter with material condition
-            if (!parts.some(p => hasDiameterSymbol(p) && hasMaterialCondition(p))) return false;
-            
-            // Must contain at least one datum reference
-            if (!parts.some(p => isDatumReference(p))) return false;
-            
-            return true;
-        }
-
-        function processWords(pageOcrData, clickX, clickY) {
-            for (let i = 0; i < pageOcrData.words.length; i++) {
-                const word = pageOcrData.words[i];
+            for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
-                
                 if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
-                    let fullText = word.text;
-                    let extendedX0 = x0;
-                    let extendedX1 = x1;
-                    let hasChanges = false;
-
-                    // Check for GD&T feature control frame
-                    if (hasGDTSymbol(word.text)) {
-                        let gdt = {
-                            symbols: [word.text],
-                            datums: [],
-                            boundary: null,
-                            value: null,
-                            x0: x0,
-                            x1: x1
-                        };
-                        
-                        // Look ahead for the complete feature control frame
-                        let j = i + 1;
-                        while (j < pageOcrData.words.length) {
-                            const nextWord = pageOcrData.words[j].text.trim();
-                            
-                            if (hasGDTSymbol(nextWord)) {
-                                gdt.symbols.push(nextWord);
-                                gdt.x1 = pageOcrData.words[j].bbox[2];
-                            } else if (isDatumReference(nextWord)) {
-                                gdt.datums.push(nextWord);
-                                gdt.x1 = pageOcrData.words[j].bbox[2];
-                            } else if (isBoundaryReference(nextWord)) {
-                                gdt.boundary = nextWord;
-                                gdt.x1 = pageOcrData.words[j].bbox[2];
-                            } else if (!isNaN(parseFloat(nextWord.replace('Ø', '')))) {
-                                gdt.value = nextWord;
-                                gdt.x1 = pageOcrData.words[j].bbox[2];
-                            } else if (nextWord.match(/^[,\s]*$/)) {
-                                // Skip whitespace and commas
-                                j++;
-                                continue;
-                            } else {
-                                break;
-                            }
-                            j++;
-                        }
-                        
-                        if (gdt.value || gdt.datums.length > 0) {
-                            // Format the GD&T callout
-                            let parts = [];
-                            if (gdt.value) parts.push(gdt.value);
-                            if (gdt.symbols.length > 0) parts.push(gdt.symbols.join(' '));
-                            if (gdt.datums.length > 0) parts.push(gdt.datums.join(', '));
-                            if (gdt.boundary) parts.push(gdt.boundary);
-                            
-                            fullText = parts.join(' ');
-                            extendedX0 = gdt.x0;
-                            extendedX1 = gdt.x1;
-                            i = j - 1;
-                            hasChanges = true;
-                        }
-                    }
-                    // Handle diameter symbol cases
-                    else if (i > 0 && hasDiameterSymbol(pageOcrData.words[i-1].text) && 
-                        !isNaN(parseFloat(word.text))) {
-                        fullText = '⌀' + word.text;
-                        extendedX0 = pageOcrData.words[i-1].bbox[0];
-                        hasChanges = true;
-                    } else if (hasDiameterSymbol(word.text) && 
-                             i < pageOcrData.words.length - 1 && 
-                             !isNaN(parseFloat(pageOcrData.words[i+1].text))) {
-                        fullText = '⌀' + pageOcrData.words[i+1].text;
-                        extendedX1 = pageOcrData.words[i+1].bbox[2];
-                        i++;
-                        hasChanges = true;
-                    }
-
-                    // Process brackets and tolerances only if we have a number
-                    if (!isNaN(parseFloat(fullText.replace('⌀', '').replace('Ø', '')))) {
-                        // Check for brackets
-                        if (!hasChanges && i > 0 && pageOcrData.words[i-1].text.trim() === '(' &&
-                            i < pageOcrData.words.length - 1 && pageOcrData.words[i+1].text.trim() === ')') {
-                            fullText = `(${fullText})`;
-                            extendedX0 = Math.min(extendedX0, pageOcrData.words[i-1].bbox[0]);
-                            extendedX1 = pageOcrData.words[i+1].bbox[2];
-                            i++;
-                            hasChanges = true;
-                        }
-
-                        // Check for tolerances (±)
-                        let nextIndex = i + 1;
-                        while (nextIndex < pageOcrData.words.length) {
-                            const nextWord = pageOcrData.words[nextIndex].text.trim();
-                            
-                            if (nextWord === '±' || nextWord.includes('±')) {
-                                if (nextIndex + 1 < pageOcrData.words.length && 
-                                    !isNaN(parseFloat(pageOcrData.words[nextIndex+1].text))) {
-                                    fullText = `${fullText} ±${pageOcrData.words[nextIndex+1].text}`;
-                                    extendedX1 = pageOcrData.words[nextIndex+1].bbox[2];
-                                    break;
-                                } else if (!isNaN(parseFloat(nextWord.replace('±', '')))) {
-                                    fullText = `${fullText} ${nextWord}`;
-                                    extendedX1 = pageOcrData.words[nextIndex].bbox[2];
-                                    break;
-                                }
-                            } else if (!nextWord.match(/^[,\s]*$/)) {
-                                break;
-                            }
-                            nextIndex++;
-                        }
-                    }
-
-                    if (hasChanges) {
-                        return {
-                            text: fullText,
-                            bbox: [extendedX0, y0, extendedX1, y1]
-                        };
-                    }
+                    return word.text;
                 }
             }
-            
-            // If no valid numeric value found
             return null;
         }
 
-        // Function to add balloon data for numeric values
-        function addBalloonDataWithValue(parameter, value, position) {
-            // Add new balloon data
-            balloonData.push({
-                parameter,
-                value,
-                ...position,
-                label: parameter // keeping label for compatibility
-            });
-            
-            // Reorder and renumber all balloons
-            reorderBalloons();
-            
-            resultsSection.classList.remove('hidden');
-            placeholderText.classList.add('hidden');
-        }
-
-        async function addBalloonDataToTable(label, position) {
+        async function addBalloonDataToTable(label, number, position) {
             loaderText.textContent = `Finding value for "${label}"...`;
             loader.classList.remove('hidden');
 
@@ -1297,49 +397,51 @@
                 
                 const data = await response.json();
                 
-                // Add new balloon data with the next sequential number
-                const nextNumber = balloonData.length + 1;
-                balloonData.push({ ...data, ...position, label, number: nextNumber });
+                balloonData.push({ ...data, ...position, number });
                 
-                // Update UI
-                updateBalloonsUI();
-                updateTableUI();
-                
+                const tr = document.createElement('tr');
+                // --- FEATURE 3: Add data-attribute to row and include remove button ---
+                tr.dataset.balloonNumber = number;
+                tr.innerHTML = `
+                    <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5; color:white;">${number}</div></td>
+                    <td class="px-4 py-3 font-medium">${data.parameter}</td>
+                    <td class="px-4 py-3">${data.value}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button class="remove-balloon-btn text-red-500 hover:text-red-700" title="Remove item">&times;</button>
+                    </td>`;
+                reportTableBody.appendChild(tr);
                 resultsSection.classList.remove('hidden');
                 placeholderText.classList.add('hidden');
+                repositionBalloons();
 
             } catch (error) {
                 showError(`Could not get data for "${label}": ${error.message}`);
+                balloonCounter--; 
             } finally {
                 loader.classList.add('hidden');
             }
         }
 
-        // Handle remove button clicks in the table
+        // --- FEATURE 4: NEW function to handle remove clicks ---
         function handleTableClick(event) {
-            const deleteButton = event.target.closest('button[data-balloon-number]');
-            if (!deleteButton) return;
-
-            const numberToRemove = parseInt(deleteButton.dataset.balloonNumber, 10);
-            
-            // Remove from data array
-            balloonData = balloonData.filter(b => b.number !== numberToRemove);
-            
-            // Remove the balloon marker from the viewer
-            const balloon = document.querySelector(`.balloon[data-balloon-number="${numberToRemove}"]`);
-            if (balloon) balloon.remove();
-            
-            // Remove the table row
-            const row = deleteButton.closest('tr');
-            if (row) row.remove();
-            
-            // Reorder and renumber remaining balloons
-            reorderBalloons();
-            
-            // Hide results section if no more balloons
-            if (balloonData.length === 0) {
-                resultsSection.classList.add('hidden');
-                placeholderText.classList.remove('hidden');
+            if (event.target.classList.contains('remove-balloon-btn')) {
+                const row = event.target.closest('tr');
+                const numberToRemove = parseInt(row.dataset.balloonNumber, 10);
+                
+                // 1. Remove from data array
+                balloonData = balloonData.filter(b => b.number !== numberToRemove);
+                
+                // 2. Remove from UI table
+                row.remove();
+                
+                // 3. Redraw the balloons on the viewer (this naturally removes the deleted one)
+                repositionBalloons();
+                
+                // 4. Hide results if no balloons are left
+                if (balloonData.length === 0) {
+                    resultsSection.classList.add('hidden');
+                    placeholderText.classList.remove('hidden');
+                }
             }
         }
         
