@@ -668,26 +668,47 @@
         }
         // ... (handleViewerClick and findWordAtClick are the same) ...
         function handleViewerClick(event) {
-            if (!ocrData || !pdfDoc) return;
-            if (event.target.tagName !== 'CANVAS') return;
+            console.log('Click event:', event);
+            
+            if (!ocrData || !pdfDoc) {
+                console.log('Missing data:', { hasOcrData: !!ocrData, hasPdfDoc: !!pdfDoc });
+                return;
+            }
+            
+            if (event.target.tagName !== 'CANVAS') {
+                console.log('Click not on canvas:', event.target.tagName);
+                return;
+            }
 
             const wordInfo = findWordAtClick(event);
+            console.log('Found word:', wordInfo);
             if (!wordInfo) return;
 
-            // Check if the text is a measurement (including GD&T callouts)
-            const isGDTCallout = wordInfo.text.includes('⊕') || wordInfo.text.includes('Ⓜ');
+            console.log('Word clicked:', wordInfo); // Debug log
+            
+            // Check if the text is a measurement or GD&T feature control frame
+            const isGDTFeature = isFeatureControlFrame(wordInfo.text);
             const numericMatch = wordInfo.text.match(/^\s*[⌀Ø]?\s*\(?\s*(\d*\.?\d+)\s*(±\s*\d*\.?\d+)?\s*\)?\s*$/);
-            const isNumeric = numericMatch !== null || isGDTCallout;
+            const isNumeric = numericMatch !== null || isGDTFeature;
             
             let customLabel, value;
             if (isNumeric) {
-                // For measurements and GD&T callouts, ask for feature name
-                const promptText = wordInfo.text.includes('⊕') || wordInfo.text.includes('Ⓜ') 
+                // For measurements and GD&T features, ask for feature name
+                const promptText = isGDTFeature
                     ? "Enter a name for this GD&T feature control:"
                     : "Enter a parameter name for this measurement:";
                 customLabel = prompt(promptText, "");
                 if (!customLabel) return;
-                value = wordInfo.text.trim(); // Keep all symbols and formatting
+                
+                // For GD&T features, parse and format the text
+                if (isGDTFeature) {
+                    const parsedFrame = parseFeatureControlFrame(wordInfo.text);
+                    value = formatGDTFrame(parsedFrame);
+                } else {
+                    value = wordInfo.text.trim(); // Keep all symbols and formatting
+                }
+                
+                console.log('Processing value:', value); // Debug log
             } else {
                 // For non-numbers, use existing behavior
                 customLabel = prompt("Enter a label for this balloon:", wordInfo.text);
