@@ -704,36 +704,68 @@
             // Check if the text is a measurement or GD&T feature control frame
             const isGDTFeature = isFeatureControlFrame(wordInfo.text);
             
+            // Check for special text patterns
+            const isLabel = /^[A-Z]+$/.test(wordInfo.text) && wordInfo.text.length > 1; // Multi-letter uppercase words are labels
+            const isPositionMarker = /^[Pp]\d+$/.test(wordInfo.text);
+            const isDimension = /^\d+[Xx×]\d*$/.test(wordInfo.text);
+            
             // Enhanced pattern to match more numeric formats
             const numericMatch = wordInfo.text.match(/^[⌀Ø]?\s*\(?(\d+\.?\d*|\.\d+)(?:[Xx×]?\d*\.?\d*)?\s*(±\s*\d*\.?\d*)?\)?$/);
+            
             const isNumeric = numericMatch !== null || 
                             isGDTFeature || 
-                            /^\d+[Xx×]\d*$/.test(wordInfo.text) || // Match dimensions like 5X
-                            /^[Pp]\d+$/.test(wordInfo.text); // Match position markers like P4
+                            isDimension ||
+                            isPositionMarker;
             
             console.log('Text analysis:', {
                 text: wordInfo.text,
+                isLabel,
                 isGDTFeature,
+                isPositionMarker,
+                isDimension,
                 numericMatch,
                 isNumeric
             });
             
+            // Check for existing balloon at this location
+            const existingBalloon = balloonData.find(b => 
+                Math.abs(b.x - clickX / pageOcrData.width) < 0.02 && 
+                Math.abs(b.y - clickY / pageOcrData.height) < 0.02
+            );
+            
+            if (existingBalloon) {
+                console.log('Balloon already exists at this location:', existingBalloon);
+                return;
+            }
+
             let customLabel, value;
             if (isNumeric) {
-                // Determine the appropriate prompt text
-                let promptText;
-                if (isGDTFeature) {
-                    promptText = "Enter a name for this GD&T feature control:";
-                } else if (/^[Pp]\d+$/.test(wordInfo.text)) {
-                    promptText = "Enter a name for this position marker:";
-                } else if (/^\d+[Xx×]\d*$/.test(wordInfo.text)) {
-                    promptText = "Enter a name for this dimension:";
+                // Handle text based on its type
+                // Determine how to handle the clicked text
+                if (isLabel) {
+                    // For label text (like "INSIDE"), use it as the label
+                    customLabel = wordInfo.text;
+                    value = null;
                 } else {
-                    promptText = "Enter a parameter name for this measurement:";
-                }
+                    // For measurements and features, prompt for a name
+                    let promptText;
+                    let defaultValue = "";
+                    
+                    if (isGDTFeature) {
+                        promptText = "Enter a name for this GD&T feature control:";
+                    } else if (isPositionMarker) {
+                        promptText = `Enter a name for position ${wordInfo.text}:`;
+                        defaultValue = `Position ${wordInfo.text}`;
+                    } else if (isDimension) {
+                        promptText = "Enter a name for this dimension:";
+                        defaultValue = `Dimension ${wordInfo.text}`;
+                    } else {
+                        promptText = "Enter a parameter name for this measurement:";
+                    }
 
-                // Show the prompt with the current value as default
-                customLabel = prompt(promptText, "");
+                    // Show the prompt with appropriate default value
+                    customLabel = prompt(promptText, defaultValue);
+                }
                 if (!customLabel) return;
 
                 // Process the value based on its type
