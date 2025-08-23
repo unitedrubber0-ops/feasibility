@@ -891,6 +891,7 @@
             return true;
         }
 
+        function processWords(pageOcrData, clickX, clickY) {
             for (let i = 0; i < pageOcrData.words.length; i++) {
                 const word = pageOcrData.words[i];
                 const [x0, y0, x1, y1] = word.bbox;
@@ -1004,12 +1005,16 @@
                         }
                     }
 
-                    return {
-                        text: fullText,
-                        bbox: [extendedX0, y0, extendedX1, y1]
-                    };
+                    if (hasChanges) {
+                        return {
+                            text: fullText,
+                            bbox: [extendedX0, y0, extendedX1, y1]
+                        };
+                    }
                 }
             }
+            
+            // If no valid numeric value found
             return null;
         }
 
