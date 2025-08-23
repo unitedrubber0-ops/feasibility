@@ -568,7 +568,11 @@
                 
                 const data = await response.json();
                 ocrData = data.ocr_results;
-                console.log("OCR data received and cached.");
+                console.log("OCR data structure:", {
+                    pageCount: ocrData.length,
+                    samplePage: ocrData[0],
+                    sampleWords: ocrData[0]?.words.slice(0, 5)
+                });
 
                 zoomControls.classList.remove('hidden');
                 await renderPdf(sourceFile, pdfScale);
@@ -757,21 +761,65 @@
             
             const rect = targetCanvas.getBoundingClientRect();
             const originalWidth = pageOcrData.width;
+            const originalHeight = pageOcrData.height;
             const renderedWidth = targetCanvas.width;
-            const scale = originalWidth / renderedWidth;
+            const renderedHeight = targetCanvas.height;
 
-            const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
-            const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
+            console.log('Canvas dimensions:', {
+                originalWidth,
+                originalHeight,
+                renderedWidth,
+                renderedHeight,
+                rect
+            });
+
+            // Calculate click coordinates in the original PDF space
+            const scaleX = originalWidth / renderedWidth;
+            const scaleY = originalHeight / renderedHeight;
+            
+            const clickX = (event.clientX - rect.left) * scaleX;
+            const clickY = (event.clientY - rect.top) * scaleY;
+
+            console.log('Click coordinates:', {
+                clientX: event.clientX,
+                clientY: event.clientY,
+                rectLeft: rect.left,
+                rectTop: rect.top,
+                calculatedX: clickX,
+                calculatedY: clickY
+            });
             
             // Get the closest word or feature control frame at the click coordinates
             let closestMatch = null;
             let minDistance = Infinity;
 
+            console.log('Looking through words:', pageOcrData.words.length);
+            
             for (const item of pageOcrData.words) {
+                // Debug log every 100th word to avoid console spam
+                if (pageOcrData.words.indexOf(item) % 100 === 0) {
+                    console.log('Sample word:', {
+                        text: item.text,
+                        bbox: item.bbox
+                    });
+                }
+                // Get word bounds
+                const [x0, y0, x1, y1] = item.bbox;
+                
                 // Check if the click point is within or very close to the word bounds
-                const dx = Math.max(item.bbox.x0 - clickX, 0, clickX - item.bbox.x1);
-                const dy = Math.max(item.bbox.y0 - clickY, 0, clickY - item.bbox.y1);
+                const dx = Math.max(x0 - clickX, 0, clickX - x1);
+                const dy = Math.max(y0 - clickY, 0, clickY - y1);
                 const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Debug log if we're close to a word
+                if (distance < 50) {
+                    console.log('Near word:', {
+                        text: item.text,
+                        distance,
+                        bounds: [x0, y0, x1, y1],
+                        click: [clickX, clickY]
+                    });
+                }
 
                 // Update closest match if this is the closest word so far
                 if (distance < minDistance) {
@@ -779,13 +827,21 @@
                     closestMatch = item;
                 }
 
-                // If we're inside a word's bounds or very close (within 5 pixels), use it
-                if (distance < 5) {
+                // Update closest match if this word is closer than previous matches
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestMatch = item;
+                }
+
+                // If we're inside a word's bounds or very close (within 20 pixels), use it immediately
+                if (distance < 20) {
+                    console.log('Found match:', item);
                     // If this is part of a feature control frame, expand selection
                     if (isFeatureControlFrame(item.text) || isDatumReference(item.text)) {
                         // Look for adjacent items that might be part of the same feature control frame
                         const frame = findCompleteFeatureControlFrame(pageOcrData.words, item);
                         if (frame) {
+                            console.log('Found complete frame:', frame);
                             return frame;
                         }
                     }
