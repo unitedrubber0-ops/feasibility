@@ -222,15 +222,136 @@
     </div>
 
     <script type="module">
+        // Constants and state
         const backendUrlBase = 'https://feasibility-638d.onrender.com';
+        const cropSize = { width: 300, height: 200 };
+        let isGdtMode = false;
+        let sourceFile = null;
+        let balloonCounter = 1;
+        let ocrData = null;
+        let pdfDoc = null;
+        let pdfScale = 1.5;
+        let balloonData = [];
+
+        // Initialize everything when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Utility functions first (non-async)
+            function showError(message) {
+                const errorMessage = document.getElementById('error-message');
+                errorMessage.textContent = message;
+                errorMessage.classList.remove('hidden');
+            }
+
+            // All async functions declared first for proper hoisting
+            async function handleFileSelect(event) {
+                try {
+                    sourceFile = event.target.files[0];
+                    if (!sourceFile) return;
+
+                    // Reset UI
+                    viewer.innerHTML = ''; reportTableBody.innerHTML = '';
+                    document.querySelectorAll('.balloon').forEach(b => b.remove());
+                    ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
+                    resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
+                    errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
+                    loader.classList.remove('hidden');
+
+                    const formData = new FormData();
+                    formData.append('sourceFile', sourceFile);
+                    
+                    const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, { method: 'POST', body: formData });
+                    if (!response.ok) throw new Error((await response.json()).error);
+                    
+                    const data = await response.json();
+                    ocrData = data.ocr_results;
+                    console.log("OCR data received and cached.");
+
+                    document.getElementById('zoom-controls').classList.remove('hidden');
+                    await renderPdf(sourceFile, pdfScale);
+                } catch (error) {
+                    showError(`Initialization failed: ${error.message}`);
+                } finally {
+                    loader.classList.add('hidden');
+                }
+            }
+
+            // Wrap all initialization in an async function to use await
+            (async function initializeApp() {
+                try {
+                    // Initialize PDF libraries first
+                    console.log('Starting application initialization...');
+                        // Initialize core functionality
+                        await window.initializePdfLibraries();
+                        console.log('PDF libraries initialized successfully');
+
+                        // Setup UI event listeners
+                        document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
+                        document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
+                        document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
+                        document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
+                            if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
+                                resetAllLabels();
+                            }
+                        });
+
+                        // Setup GD&T mode
+                        const modeToggle = document.getElementById('modeToggle');
+                        const gdtResultsContainer = document.getElementById('gdtResultsContainer');
+                        if (modeToggle && gdtResultsContainer) {
+                            modeToggle.addEventListener('click', () => {
+                                isGdtMode = !isGdtMode;
+                                modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
+                                modeToggle.classList.toggle('gdt-mode', isGdtMode);
+                                gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Failed to initialize UI:', error);
+                        showError('Failed to initialize UI: ' + error.message);
+                    }
         
-        // --- DOM ELEMENT REFERENCES ---
-        const sourceFileInput = document.getElementById('source-file-input');
-        const viewerContainer = document.getElementById('viewer-container');
-        const viewer = document.getElementById('viewer');
-        const reportTableBody = document.getElementById('report-body');
-        const resultsSection = document.getElementById('results-section');
-        const loader = document.getElementById('loader');
+                    // Setup event handlers
+                    try {
+                        const viewer = document.getElementById('viewer');
+                        if (viewer) {
+                            viewer.addEventListener('click', async (event) => {
+                                try {
+                                    const canvas = event.target;
+                                    if (canvas.tagName !== 'CANVAS' || !ocrData || !pdfDoc) return;
+
+                                    const rect = canvas.getBoundingClientRect();
+                                    const x = event.clientX - rect.left;
+                                    const y = event.clientY - rect.top;
+                                    
+                                    if (isGdtMode) {
+                                        // GD&T Analysis Mode
+                                        const imageBlob = await cropImageAtClick(canvas, x, y);
+                                        await analyzeGdtCrop(imageBlob);
+                                        
+                                        // Show highlight box
+                                        const highlight = document.createElement('div');
+                                        highlight.className = 'gdt-highlight';
+                                        highlight.style.left = (x - cropSize.width / 2) + 'px';
+                                        highlight.style.top = (y - cropSize.height / 2) + 'px';
+                                        highlight.style.width = cropSize.width + 'px';
+                                        highlight.style.height = cropSize.height + 'px';
+                                        viewer.appendChild(highlight);
+                                        
+                                        setTimeout(() => highlight.remove(), 2000);
+                                    } else {
+                                        // Original ballooning mode code
+                                        handleViewerClick(event);
+                                    }
+                                } catch (error) {
+                                    console.error('Error handling viewer click:', error);
+                                    showError('Error processing click: ' + error.message);
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Failed to setup event handlers:', error);
+                        showError('Failed to setup event handlers: ' + error.message);
+                    }
         const loaderText = document.getElementById('loader-text');
         const errorMessage = document.getElementById('error-message');
         const downloadPdfBtn = document.getElementById('download-pdf-btn');
@@ -570,7 +691,7 @@
             }
         }
 
-        // --- (downloadPdfWithBalloons and downloadDocxReport are the same) ---
+        // --- PDF Download Functions ---
         async function downloadPdfWithBalloons() {
             // Check required conditions
             if (!pdfDoc) {
@@ -778,123 +899,17 @@
             errorMessage.textContent = message;
             errorMessage.classList.remove('hidden');
         }
-    </script>
 
-    <script>
-        // Main initialization code
-            const modeToggle = document.getElementById('modeToggle');
-            const gdtResultsContainer = document.getElementById('gdtResultsContainer');
-            const gdtResultsBody = document.getElementById('gdtResultsBody');
-            const cropSize = { width: 200, height: 50 }; // Size of the crop area
-
-            // Mode toggle handler
-            modeToggle.addEventListener('click', () => {
-                isGdtMode = !isGdtMode;
-                modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
-                modeToggle.classList.toggle('gdt-mode', isGdtMode);
-                gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
-            });
-
-            // Function to crop the image around a click
-            async function cropImageAtClick(canvas, x, y) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = cropSize.width;
-                tempCanvas.height = cropSize.height;
-                const ctx = tempCanvas.getContext('2d');
-                
-                // Calculate crop coordinates (centered on click)
-                const sourceX = Math.max(0, x - cropSize.width / 2);
-                const sourceY = Math.max(0, y - cropSize.height / 2);
-                
-                // Draw the cropped portion
-                ctx.drawImage(canvas,
-                    sourceX, sourceY, cropSize.width, cropSize.height,
-                    0, 0, cropSize.width, cropSize.height
-                );
-                
-                // Convert to blob
-                return new Promise(resolve => {
-                    tempCanvas.toBlob(resolve, 'image/png');
-                });
+        // Initialize PDF libraries when everything is loaded
+        (async function initializeApp() {
+            try {
+                await window.initializePdfLibraries();
+                console.log('Application initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize application:', error);
+                showError('Failed to initialize application: ' + error.message);
             }
-
-            // Function to send cropped image to backend
-            async function analyzeGdtCrop(imageBlob) {
-                const formData = new FormData();
-                formData.append('image_crop', imageBlob);
-                
-                try {
-                    const response = await fetch('http://localhost:5000/analyze-gdt-crop', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    displayGdtResults(data);
-                } catch (error) {
-                    console.error('Error analyzing GD&T crop:', error);
-                    alert('Error analyzing GD&T feature. Please try again.');
-                }
-            }
-
-            // Function to display GD&T results in the table
-            function displayGdtResults(data) {
-                const row = document.createElement('tr');
-                
-                // Format datums string
-                const datumsStr = data.datums
-                    .map(d => `${d.datum_letter}${d.datum_material_condition ? ' ' + d.datum_material_condition : ''}`)
-                    .join(' | ');
-                
-                // Create cells
-                row.innerHTML = `
-                    <td>${data.gdt_symbol_name}</td>
-                    <td>${data.diameter_symbol ? 'Ø' : ''}${data.tolerance_value}</td>
-                    <td>${datumsStr}</td>
-                    <td>${data.material_condition_modifier || '-'}</td>
-                `;
-                
-                // Add to table
-                gdtResultsBody.appendChild(row);
-            }
-
-            // Add click handler to viewer
-            if (document.getElementById('viewer')) {
-                document.getElementById('viewer').addEventListener('click', async function(event) {
-                    if (!window.currentPage) return;
-                    
-                    const canvas = event.target;
-                    const rect = canvas.getBoundingClientRect();
-                    const x = event.clientX - rect.left;
-                    const y = event.clientY - rect.top;
-                    
-                    if (isGdtMode) {
-                        // GD&T Analysis Mode
-                        const imageBlob = await cropImageAtClick(canvas, x, y);
-                        await analyzeGdtCrop(imageBlob);
-                        
-                        // Show highlight box
-                        const highlight = document.createElement('div');
-                        highlight.className = 'gdt-highlight';
-                        highlight.style.left = (x - cropSize.width / 2) + 'px';
-                        highlight.style.top = (y - cropSize.height / 2) + 'px';
-                        highlight.style.width = cropSize.width + 'px';
-                        highlight.style.height = cropSize.height + 'px';
-                        document.getElementById('viewer').appendChild(highlight);
-                        
-                        // Remove highlight after animation
-                        setTimeout(() => highlight.remove(), 2000);
-                    } else {
-                        // Original ballooning mode code
-                        window.addBalloon(x / canvas.width, y / canvas.height);
-                    }
-                });
-            }
-        });
+        })();
     </script>
 </body>
 </html>
