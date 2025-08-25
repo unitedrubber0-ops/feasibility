@@ -222,46 +222,289 @@
     </div>
 
     <script type="module">
-        // Constants and state
-        const backendUrlBase = 'https://feasibility-638d.onrender.com';
-        const cropSize = { width: 300, height: 200 };
-        let isGdtMode = false;
-        let sourceFile = null;
-        let balloonCounter = 1;
-        let ocrData = null;
-        let pdfDoc = null;
-        let pdfScale = 1.5;
-        let balloonData = [];
+        // IIFE to avoid polluting global scope
+        (() => {
+            // Constants and state
+            const backendUrlBase = 'https://feasibility-638d.onrender.com';
+            const cropSize = { width: 300, height: 200 };
+            let isGdtMode = false;
+            let sourceFile = null;
+            let balloonCounter = 1;
+            let ocrData = null;
+            let pdfDoc = null;
+            let pdfScale = 1.5;
+            let balloonData = [];
 
-        // Utility functions
-        function showError(message) {
+            // DOM elements
             const errorMessage = document.getElementById('error-message');
-            errorMessage.textContent = message;
-            errorMessage.classList.remove('hidden');
-        }
+            const loaderText = document.getElementById('loader-text');
+            const loader = document.getElementById('loader');
+            const viewer = document.getElementById('viewer');
+            const modeToggle = document.getElementById('modeToggle');
+            const gdtResultsContainer = document.getElementById('gdtResultsContainer');
+            const reportTableBody = document.getElementById('report-body');
+            const resultsSection = document.getElementById('results-section');
+            const placeholderText = document.getElementById('placeholder-text');
+            const downloadDocxBtn = document.getElementById('download-docx-btn');
+            const zoomInBtn = document.getElementById('zoom-in-btn');
+            const zoomOutBtn = document.getElementById('zoom-out-btn');
+            const zoomResetBtn = document.getElementById('zoom-reset-btn');
+
+            // --- Event Handlers ---
+            const handleViewerClick = async (event) => {
+                const canvas = event.target;
+                if (!(canvas instanceof HTMLCanvasElement) || !ocrData || !pdfDoc) return;
+
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                if (isGdtMode) {
+                    try {
+                        const imageBlob = await cropImageAtClick(canvas, x, y);
+                        await analyzeGdtCrop(imageBlob);
+                        
+                        // Show highlight box
+                        const highlight = document.createElement('div');
+                        highlight.className = 'gdt-highlight';
+                        highlight.style.left = (x - cropSize.width / 2) + 'px';
+                        highlight.style.top = (y - cropSize.height / 2) + 'px';
+                        highlight.style.width = cropSize.width + 'px';
+                        highlight.style.height = cropSize.height + 'px';
+                        viewer.appendChild(highlight);
+                        
+                        setTimeout(() => highlight.remove(), 2000);
+                    } catch (error) {
+                        console.error('Error in GD&T mode:', error);
+                        showError('Error processing GD&T feature: ' + error.message);
+                    }
+                } else {
+                    // Ballooning mode
+                    const clickedWord = findWordAtClick(event);
+                    if (!clickedWord) return;
+
+                    const customLabel = prompt("Enter a label for this balloon:", clickedWord);
+                    if (!customLabel) return;
+
+                    const pageNum = parseInt(canvas.dataset.pageNum, 10);
+                    const relativeX = x / canvas.width;
+                    const relativeY = y / canvas.height;
+
+                    addBalloonDataToTable(customLabel, balloonCounter++, { 
+                        page: pageNum, 
+                        x: relativeX, 
+                        y: relativeY 
+                    });
+                }
+            };
+
+            // Utility function to show error messages
+            const showError = (message) => {
+                if (errorMessage) {
+                    errorMessage.textContent = message;
+                    errorMessage.classList.remove('hidden');
+                }
+            };
+
+            // Other utility functions
+            const findWordAtClick = (event) => {
+                const targetCanvas = event.target;
+                if (!(targetCanvas instanceof HTMLCanvasElement)) return null;
+
+                const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
+                const pageOcrData = ocrData?.find(p => p.page === pageNum);
+                if (!pageOcrData) return null;
+                
+                const rect = targetCanvas.getBoundingClientRect();
+                const originalWidth = pageOcrData.width;
+                const renderedWidth = targetCanvas.width;
+                const scale = originalWidth / renderedWidth;
+
+                const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
+                const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
+
+                for (const word of pageOcrData.words) {
+                    const [x0, y0, x1, y1] = word.bbox;
+                    if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
+                        return word.text;
+                    }
+                }
+                return null;
+            };
+
+            const cropImageAtClick = async (canvas, x, y) => {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = cropSize.width;
+                tempCanvas.height = cropSize.height;
+                const ctx = tempCanvas.getContext('2d');
+                
+                const sourceX = Math.max(0, x - cropSize.width / 2);
+                const sourceY = Math.max(0, y - cropSize.height / 2);
+                
+                ctx.drawImage(canvas,
+                    sourceX, sourceY, cropSize.width, cropSize.height,
+                    0, 0, cropSize.width, cropSize.height
+                );
+                
+                return new Promise(resolve => {
+                    tempCanvas.toBlob(resolve, 'image/png');
+                });
+            };
+
+            // Document initialization
+            async function initializePdfLibs() {
+                const maxAttempts = 10;
+                const delayBetweenAttempts = 200;
+                
+                for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    try {
+                        if (typeof pdfjsLib === 'undefined') {
+                            throw new Error('PDF.js not loaded yet');
+                        }
+                        
+                        if (typeof window.PDFLib === 'undefined') {
+                            throw new Error('PDF-Lib not loaded yet');
+                        }
+                        
+                        console.log('PDF.js and PDF-Lib loaded successfully');
+                        window.pdfjsLib = pdfjsLib;
+                        return true;
+                        
+                    } catch (error) {
+                        if (attempt === maxAttempts - 1) {
+                            console.error('Library initialization error:', error);
+                            throw new Error('PDF-Lib failed to load after multiple attempts');
+                        }
+                        await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
+                    }
+                }
+            }
+
+            // PDF rendering functions
+            const renderAllPdfPages = async (scale) => {
+                if (!viewer || !pdfDoc) return;
+                viewer.innerHTML = '';
+                
+                if (zoomLevel) {
+                    zoomLevel.textContent = `${Math.round(scale * 100)}%`;
+                }
+
+                for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    canvas.dataset.pageNum = i;
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    viewer.appendChild(canvas);
+                }
+                repositionBalloons();
+            };
+
+            const renderPdf = async (file, scale) => {
+                try {
+                    if (!window.pdfjsLib) {
+                        throw new Error('PDF.js library not loaded');
+                    }
+                    
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    
+                    const arrayBuffer = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsArrayBuffer(file);
+                    });
+
+                    const typedarray = new Uint8Array(arrayBuffer);
+                    pdfDoc = await window.pdfjsLib.getDocument(typedarray).promise;
+                    await renderAllPdfPages(scale);
+                } catch (error) {
+                    console.error('PDF rendering error:', error);
+                    showError(`Failed to render PDF: ${error.message}`);
+                }
+            };
+
+            const changePdfScale = (amount, reset = false) => {
+                if (!pdfDoc) return;
+                if (reset) {
+                    pdfScale = 1.5;
+                } else {
+                    pdfScale += amount;
+                    if (pdfScale < 0.5) pdfScale = 0.5;
+                }
+                renderAllPdfPages(pdfScale);
+            };
+
+            // --- Core app initialization ---
+            const initializeApp = async () => {
+            try {
+                // Initialize PDF libraries
+                await window.initializePdfLibraries();
+                console.log('Application initialized successfully');
+
+                // Setup event listeners for file operations
+                document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
+                document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
+                document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
+                
+                // Setup reset functionality
+                document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
+                    if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
+                        resetAllLabels();
+                    }
+                });
+
+                // Setup table interactions
+                document.getElementById('report-table')?.addEventListener('click', handleTableClick);
+
+                // Setup viewer click handler
+                viewer?.addEventListener('click', handleViewerClick);
+
+                // Setup GD&T mode toggle
+                modeToggle?.addEventListener('click', () => {
+                    isGdtMode = !isGdtMode;
+                    modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
+                    modeToggle.classList.toggle('gdt-mode', isGdtMode);
+                    gdtResultsContainer?.classList.toggle('hidden', !isGdtMode);
+                });
+
+                // Setup zoom controls
+                zoomInBtn?.addEventListener('click', () => changePdfScale(0.25));
+                zoomOutBtn?.addEventListener('click', () => changePdfScale(-0.25));
+                zoomResetBtn?.addEventListener('click', () => changePdfScale(0, true));
+            } catch (error) {
+                console.error('Failed to initialize application:', error);
+                showError('Failed to initialize application: ' + error.message);
+            }
+        };
 
         // Initialize everything when DOM is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            (async function initializeApp() {
-                try {
-                    // Initialize PDF libraries
-                    await window.initializePdfLibraries();
-                    console.log('Application initialized successfully');
+        document.addEventListener('DOMContentLoaded', initializeApp);
+        });
+                    }
+                });
 
-                    // Setup event listeners
-                    document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
-                    document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
-                    document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
-                    document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
-                        if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
-                            resetAllLabels();
-                        }
+                // Setup GD&T mode
+                if (modeToggle && gdtResultsContainer) {
+                    modeToggle.addEventListener('click', () => {
+                        isGdtMode = !isGdtMode;
+                        modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
+                        modeToggle.classList.toggle('gdt-mode', isGdtMode);
+                        gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
                     });
-                } catch (error) {
-                    console.error('Failed to initialize application:', error);
-                    showError('Failed to initialize application: ' + error.message);
                 }
-            })();
+
+                // Setup viewer click handler
+                if (viewer) {
+                    viewer.addEventListener('click', handleViewerClick);
+                }
+            } catch (error) {
+                console.error('Failed to initialize application:', error);
+                showError('Failed to initialize application: ' + error.message);
+            }
         });
 
         // Event handler functions
@@ -312,90 +555,11 @@
         const modeToggle = document.getElementById('modeToggle');
         const gdtResultsContainer = document.getElementById('gdtResultsContainer');
 
-        document.addEventListener('DOMContentLoaded', () => {
-            (async function initializeApp() {
-                try {
-                    // Initialize PDF libraries first
-                    console.log('Starting application initialization...');
-                    await window.initializePdfLibraries();
-                    console.log('PDF libraries initialized successfully');
-
-                    // Setup UI event listeners
-                    document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
-                    document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
-                    document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
-                    document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
-                        if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
-                            resetAllLabels();
-                        }
-                    });
-
-                    // Setup GD&T mode
-                    if (modeToggle && gdtResultsContainer) {
-                        modeToggle.addEventListener('click', () => {
-                            isGdtMode = !isGdtMode;
-                            modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
-                            modeToggle.classList.toggle('gdt-mode', isGdtMode);
-                            gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
-                        });
-                    }
-
-                    // Setup viewer click handler
-                    if (viewer) {
-                        viewer.addEventListener('click', async (event) => {
-                            try {
-                                const canvas = event.target;
-                                if (canvas.tagName !== 'CANVAS' || !ocrData || !pdfDoc) return;
-
-                                const rect = canvas.getBoundingClientRect();
-                                const x = event.clientX - rect.left;
-                                const y = event.clientY - rect.top;
-                                
-                                if (isGdtMode) {
-                                    // GD&T Analysis Mode
-                                    const imageBlob = await cropImageAtClick(canvas, x, y);
-                                    await analyzeGdtCrop(imageBlob);
-                                    
-                                    // Show highlight box
-                                    const highlight = document.createElement('div');
-                                    highlight.className = 'gdt-highlight';
-                                    highlight.style.left = (x - cropSize.width / 2) + 'px';
-                                    highlight.style.top = (y - cropSize.height / 2) + 'px';
-                                    highlight.style.width = cropSize.width + 'px';
-                                    highlight.style.height = cropSize.height + 'px';
-                                    viewer.appendChild(highlight);
-                                    
-                                    setTimeout(() => highlight.remove(), 2000);
-                                } else {
-                                    // Original ballooning mode code
-                                    handleViewerClick(event);
-                                }
-                            } catch (error) {
-                                console.error('Error handling viewer click:', error);
-                                showError('Error processing click: ' + error.message);
-                            }
-                        });
-                    }
                 } catch (error) {
                     console.error('Failed to initialize application:', error);
                     showError('Failed to initialize application: ' + error.message);
                 }
             })();
-        });
-
-        // Reset all labels function
-        function resetAllLabels() {
-            // Clear all balloon markers
-            document.querySelectorAll('.balloon').forEach(b => b.remove());
-            // Reset the balloon data array
-            balloonData = [];
-            // Clear the report table
-            if (reportTableBody) reportTableBody.innerHTML = '';
-            // Reset the balloon counter
-            balloonCounter = 1;
-            // Hide results section if it's visible
-            resultsSection.classList.add('hidden');
-        }
 
         // --- CORE FUNCTIONS ---
         async function renderPdf(file, scale) {
@@ -783,11 +947,6 @@
                 loader.classList.add('hidden');
                 downloadDocxBtn.disabled = false;
             }
-        }
-
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.classList.remove('hidden');
         }
     </script>
 </body>
