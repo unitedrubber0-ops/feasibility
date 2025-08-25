@@ -193,11 +193,19 @@ def process_drawing_for_gdt_handler():
         ]
         response = model.generate_content(prompt)
         cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        response_json = json.loads(cleaned_text)
-        return jsonify(response_json)
+        # Remove any trailing commas before closing brackets or braces
+        cleaned_text = cleaned_text.replace(",]", "]").replace(",}", "}")
+        try:
+            response_json = json.loads(cleaned_text)
+            return jsonify(response_json)
+        except json.JSONDecodeError as json_err:
+            print(f"JSON Parsing Error: {json_err}")
+            print(f"Problematic JSON text: {cleaned_text}")
+            raise Exception(f"Failed to parse GD&T response: {json_err}")
 
     except Exception as e:
         print(f"An error occurred during GD&T processing: {e}")
+        raise
         return jsonify({"error": f"Failed to process drawing for GD&T: {str(e)}"}), 500
 
 # --- The /export-docx endpoint remains unchanged ---
