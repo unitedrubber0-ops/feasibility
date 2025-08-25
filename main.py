@@ -235,6 +235,65 @@ def process_drawing_for_gdt_handler():
     except Exception as e:
         print(f"An error occurred during GD&T processing: {e}")
         raise
+
+@app.route('/analyze-gdt-crop', methods=['POST'])
+def analyze_gdt_crop_handler():
+    """
+    Analyzes a small, cropped image of a feature control frame.
+    """
+    if 'image_crop' not in request.files:
+        return jsonify({"error": "Missing image crop"}), 400
+
+    image_crop_file = request.files['image_crop']
+    
+    try:
+        # Convert the file to an in-memory image object
+        img_buffer = io.BytesIO(image_crop_file.read())
+        img = Image.open(img_buffer)
+
+        # --- STANDARDIZED MODEL ---
+        model = genai.GenerativeModel("gemini-1.5-pro-latest")
+        gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
+
+        # Use the same expert-level prompt as before
+        prompt = [
+            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard.",
+            "Analyze the following cropped image of a single feature control frame.",
+            "Return the findings as a single, raw JSON object representing this one feature.",
+            "The object should have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
+            # Give a clear example
+            "For example, for an image of 'Position | Ø0.1 M | A M | B', your JSON output should be:",
+            '''
+            {
+              "gdt_symbol_name": "Position",
+              "tolerance_value": "0.1",
+              "diameter_symbol": true,
+              "material_condition_modifier": "MMC",
+              "datums": [
+                { "datum_letter": "A", "datum_material_condition": "MMC" },
+                { "datum_letter": "B", "datum_material_condition": null }
+              ]
+            }
+            ''',
+            "Now, analyze this image:",
+            gdt_image,
+        ]
+        
+        response = model.generate_content(prompt)
+        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
+        # Remove any trailing commas before closing brackets or braces
+        cleaned_text = cleaned_text.replace(",]", "]").replace(",}", "}")
+        try:
+            response_json = json.loads(cleaned_text)
+            return jsonify(response_json)
+        except json.JSONDecodeError as json_err:
+            print(f"JSON Parsing Error: {json_err}")
+            print(f"Problematic JSON text: {cleaned_text}")
+            raise Exception(f"Failed to parse GD&T response: {json_err}")
+
+    except Exception as e:
+        print(f"An error occurred during GD&T crop analysis: {e}")
+        return jsonify({"error": f"Failed to analyze GD&T crop: {str(e)}"}), 500
         return jsonify({"error": f"Failed to process drawing for GD&T: {str(e)}"}), 500
 
 # --- The /export-docx endpoint remains unchanged ---

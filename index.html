@@ -84,6 +84,44 @@
             font-size: 1.5rem; line-height: 1rem; font-weight: bold;
             padding: 0.25rem; cursor: pointer;
         }
+        /* GD&T Mode Styles */
+        .gdt-highlight {
+            position: absolute;
+            border: 2px solid #4CAF50;
+            background-color: rgba(76, 175, 80, 0.1);
+            pointer-events: none;
+            z-index: 100;
+        }
+        .mode-toggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            background-color: #2563eb;
+            color: white;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .mode-toggle.gdt-mode {
+            background-color: #059669;
+        }
+        .gdt-results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        .gdt-results-table th,
+        .gdt-results-table td {
+            border: 1px solid #d1d5db;
+            padding: 0.5rem;
+            text-align: left;
+        }
+        .gdt-results-table th {
+            background-color: #f3f4f6;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -95,9 +133,29 @@
             <p class="mt-2 text-lg text-gray-600">Upload, view, and balloon inspection documents.</p>
         </header>
 
+        <!-- Mode Toggle Button -->
+        <button id="modeToggle" class="mode-toggle">
+            Ballooning Mode
+        </button>
+
         <div class="grid md:grid-cols-2 gap-8">
             <!-- Left Panel: Document Viewer -->
             <div>
+                <!-- GD&T Results Table -->
+                <div id="gdtResultsContainer" class="hidden mb-4">
+                    <h3 class="text-lg font-semibold mb-2">GD&T Analysis Results</h3>
+                    <table class="gdt-results-table">
+                        <thead>
+                            <tr>
+                                <th>Characteristic</th>
+                                <th>Value</th>
+                                <th>Datums</th>
+                                <th>Modifiers</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gdtResultsBody"></tbody>
+                    </table>
+                </div>
                 <!-- ... (Viewer HTML is the same, with zoom controls) ... -->
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold">Document Viewer</h2>
@@ -559,7 +617,125 @@
                 a.click();
                 URL.revokeObjectURL(url);
                 a.remove();
+            }
+        </script>
 
+        <!-- GD&T Mode Implementation -->
+        <script>
+            // Initialize GD&T mode variables
+            let isGdtMode = false;
+            const modeToggle = document.getElementById('modeToggle');
+            const gdtResultsContainer = document.getElementById('gdtResultsContainer');
+            const gdtResultsBody = document.getElementById('gdtResultsBody');
+            const cropSize = { width: 200, height: 50 }; // Size of the crop area
+
+            // Mode toggle handler
+            modeToggle.addEventListener('click', () => {
+                isGdtMode = !isGdtMode;
+                modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
+                modeToggle.classList.toggle('gdt-mode', isGdtMode);
+                gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
+            });
+
+            // Function to crop the image around a click
+            async function cropImageAtClick(canvas, x, y) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = cropSize.width;
+                tempCanvas.height = cropSize.height;
+                const ctx = tempCanvas.getContext('2d');
+                
+                // Calculate crop coordinates (centered on click)
+                const sourceX = Math.max(0, x - cropSize.width / 2);
+                const sourceY = Math.max(0, y - cropSize.height / 2);
+                
+                // Draw the cropped portion
+                ctx.drawImage(canvas,
+                    sourceX, sourceY, cropSize.width, cropSize.height,
+                    0, 0, cropSize.width, cropSize.height
+                );
+                
+                // Convert to blob
+                return new Promise(resolve => {
+                    tempCanvas.toBlob(resolve, 'image/png');
+                });
+            }
+
+            // Function to send cropped image to backend
+            async function analyzeGdtCrop(imageBlob) {
+                const formData = new FormData();
+                formData.append('image_crop', imageBlob);
+                
+                try {
+                    const response = await fetch('http://localhost:5000/analyze-gdt-crop', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    displayGdtResults(data);
+                } catch (error) {
+                    console.error('Error analyzing GD&T crop:', error);
+                    alert('Error analyzing GD&T feature. Please try again.');
+                }
+            }
+
+            // Function to display GD&T results in the table
+            function displayGdtResults(data) {
+                const row = document.createElement('tr');
+                
+                // Format datums string
+                const datumsStr = data.datums
+                    .map(d => `${d.datum_letter}${d.datum_material_condition ? ' ' + d.datum_material_condition : ''}`)
+                    .join(' | ');
+                
+                // Create cells
+                row.innerHTML = `
+                    <td>${data.gdt_symbol_name}</td>
+                    <td>${data.diameter_symbol ? 'Ø' : ''}${data.tolerance_value}</td>
+                    <td>${datumsStr}</td>
+                    <td>${data.material_condition_modifier || '-'}</td>
+                `;
+                
+                // Add to table
+                gdtResultsBody.appendChild(row);
+            }
+
+            // Modify the viewer click handler to handle both modes
+            document.getElementById('viewer').addEventListener('click', async function(event) {
+                if (!currentPage) return;
+                
+                const canvas = event.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                
+                if (isGdtMode) {
+                    // GD&T Analysis Mode
+                    const imageBlob = await cropImageAtClick(canvas, x, y);
+                    await analyzeGdtCrop(imageBlob);
+                    
+                    // Show highlight box
+                    const highlight = document.createElement('div');
+                    highlight.className = 'gdt-highlight';
+                    highlight.style.left = (x - cropSize.width / 2) + 'px';
+                    highlight.style.top = (y - cropSize.height / 2) + 'px';
+                    highlight.style.width = cropSize.width + 'px';
+                    highlight.style.height = cropSize.height + 'px';
+                    document.getElementById('viewer').appendChild(highlight);
+                    
+                    // Remove highlight after animation
+                    setTimeout(() => highlight.remove(), 2000);
+                } else {
+                    // Original ballooning mode code
+                    addBalloon(x / canvas.width, y / canvas.height);
+                }
+            });
+        </script>
+    </body>
             } catch(e) {
                 console.error("PDF Generation Error:", e);
                 showError(`Failed to generate PDF: ${e.message}`);
