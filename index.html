@@ -236,24 +236,29 @@
         let balloonData = [];
 
         // Initialize everything when DOM is ready
+        // Initialize global variables for DOM elements
+        let viewer, errorMessage, loaderText, loader, reportTableBody, resultsSection,
+            placeholderText, downloadDocxBtn, zoomControls, zoomLevel, downloadPdfBtn,
+            zoomOutBtn, zoomInBtn, zoomResetBtn, modeToggle, gdtResultsContainer;
+
         document.addEventListener('DOMContentLoaded', () => {
-            // DOM Elements
-            const viewer = document.getElementById('viewer');
-            const errorMessage = document.getElementById('error-message');
-            const loaderText = document.getElementById('loader-text');
-            const loader = document.getElementById('loader');
-            const reportTableBody = document.getElementById('report-body');
-            const resultsSection = document.getElementById('results-section');
-            const placeholderText = document.getElementById('placeholder-text');
-            const downloadDocxBtn = document.getElementById('download-docx-btn');
-            const zoomControls = document.getElementById('zoom-controls');
-            const zoomLevel = document.getElementById('zoom-level');
-            const downloadPdfBtn = document.getElementById('download-pdf-btn');
-            const zoomOutBtn = document.getElementById('zoom-out-btn');
-            const zoomInBtn = document.getElementById('zoom-in-btn');
-            const zoomResetBtn = document.getElementById('zoom-reset-btn');
-            const modeToggle = document.getElementById('modeToggle');
-            const gdtResultsContainer = document.getElementById('gdtResultsContainer');
+            // Initialize DOM Elements
+            viewer = document.getElementById('viewer');
+            errorMessage = document.getElementById('error-message');
+            loaderText = document.getElementById('loader-text');
+            loader = document.getElementById('loader');
+            reportTableBody = document.getElementById('report-body');
+            resultsSection = document.getElementById('results-section');
+            placeholderText = document.getElementById('placeholder-text');
+            downloadDocxBtn = document.getElementById('download-docx-btn');
+            zoomControls = document.getElementById('zoom-controls');
+            zoomLevel = document.getElementById('zoom-level');
+            downloadPdfBtn = document.getElementById('download-pdf-btn');
+            zoomOutBtn = document.getElementById('zoom-out-btn');
+            zoomInBtn = document.getElementById('zoom-in-btn');
+            zoomResetBtn = document.getElementById('zoom-reset-btn');
+            modeToggle = document.getElementById('modeToggle');
+            gdtResultsContainer = document.getElementById('gdtResultsContainer');
 
             // Initialize libraries and setup
             (async function initializeApp() {
@@ -385,6 +390,16 @@
                 }
             });
 
+            // Utility functions
+            function showError(message) {
+                if (!errorMessage) {
+                    console.error('Error element not found:', message);
+                    return;
+                }
+                errorMessage.textContent = message;
+                errorMessage.classList.remove('hidden');
+            }
+
             // Reset all labels function
             function resetAllLabels() {
                 // Clear all balloon markers
@@ -396,7 +411,7 @@
                 // Reset the balloon counter
                 balloonCounter = 1;
                 // Hide results section if it's visible
-                resultsSection.classList.add('hidden');
+                resultsSection?.classList.add('hidden');
             }
 
             // --- CORE FUNCTIONS ---
