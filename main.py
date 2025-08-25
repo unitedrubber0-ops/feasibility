@@ -194,7 +194,7 @@ def process_drawing_for_gdt_handler():
         response = model.generate_content(prompt)
         cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
         response_json = json.loads(cleaned_text)
-        return jsonify(response_json)        return jsonify(response_json)
+        return jsonify(response_json)
 
     except Exception as e:
         print(f"An error occurred during GD&T processing: {e}")
