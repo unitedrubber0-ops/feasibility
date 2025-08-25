@@ -201,8 +201,17 @@ def analyze_gdt_at_point_handler():
             "Return the findings as a single, raw JSON object representing this one feature.",
             "The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
             
-            # --- NEW SELF-CORRECTION INSTRUCTION ---
-            "CRITICAL: Double-check the numerical values. Tolerance values in this context are rarely small decimals like '0.9' when the number on the drawing is clearly '9'. Be careful to distinguish between periods and pixel noise.",
+            # --- ENHANCED ACCURACY INSTRUCTIONS ---
+            "CRITICAL ACCURACY REQUIREMENTS:",
+            "1. Numbers must be EXACT - pay special attention to commonly confused pairs:",
+            "   - 6 vs 9 (check orientation and context)",
+            "   - 3 vs 8 (look for gaps in curves)",
+            "   - 1 vs 7 (check for horizontal bars)",
+            "2. Double-check numerical values - look at the entire Feature Control Frame for context",
+            "3. Material condition modifiers must be exact: 'MMC' for Maximum Material Condition (M), 'LMC' for Least Material Condition (L), or null if none specified",
+            "4. Only include datums that are explicitly shown in the frame - do not add extra datums",
+            "5. Each datum's material condition must match exactly what's shown - if a datum has no modifier, its datum_material_condition should be null",
+            "6. For position tolerances, verify if the value matches typical ranges (usually 0.2 to 2.0 for metric)",
             
             "For example, for a frame that reads 'Position | Ø9 M | A M | B', your JSON output should be:",
             """
