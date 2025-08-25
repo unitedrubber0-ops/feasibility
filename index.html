@@ -398,42 +398,20 @@
             resultsSection.classList.add('hidden');
         }
 
-        // --- EVENT LISTENERS ---
-        // Make sure elements exist before adding listeners
-        if (sourceFileInput) sourceFileInput.addEventListener('change', handleFileSelect);
-        if (viewerContainer) viewerContainer.addEventListener('click', handleViewerClick);
-        if (zoomInBtn) zoomInBtn.addEventListener('click', () => changePdfScale(0.25));
-        if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => changePdfScale(-0.25));
-        if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => changePdfScale(0, true));
-        if (downloadPdfBtn) downloadPdfBtn.addEventListener('click', downloadPdfWithBalloons);
-        if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', downloadDocxReport);
-        if (reportTableBody) reportTableBody.addEventListener('click', handleTableClick);
-        
-        // Add reset labels button listener
-        const resetLabelsBtn = document.getElementById('reset-labels-btn');
-        if (resetLabelsBtn) {
-            resetLabelsBtn.addEventListener('click', () => {
-                if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
-                    resetAllLabels();
-                }
-            });
-        }
-
-
-        // --- CORE FUNCTIONS (handleFileSelect, renderPdf, renderAllPdfPages, changePdfScale are the same) ---
+        // --- CORE FUNCTIONS ---
         async function handleFileSelect(event) {
-             sourceFile = event.target.files[0];
-            if (!sourceFile) return;
-
-            // Reset UI
-            viewer.innerHTML = ''; reportTableBody.innerHTML = '';
-            document.querySelectorAll('.balloon').forEach(b => b.remove());
-            ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
-            resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
-            errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
-            loader.classList.remove('hidden');
-
             try {
+                sourceFile = event.target.files[0];
+                if (!sourceFile) return;
+
+                // Reset UI
+                viewer.innerHTML = ''; reportTableBody.innerHTML = '';
+                document.querySelectorAll('.balloon').forEach(b => b.remove());
+                ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
+                resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
+                errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
+                loader.classList.remove('hidden');
+
                 const formData = new FormData();
                 formData.append('sourceFile', sourceFile);
                 
@@ -444,7 +422,7 @@
                 ocrData = data.ocr_results;
                 console.log("OCR data received and cached.");
 
-                zoomControls.classList.remove('hidden');
+                document.getElementById('zoom-controls').classList.remove('hidden');
                 await renderPdf(sourceFile, pdfScale);
             } catch (error) {
                 showError(`Initialization failed: ${error.message}`);
