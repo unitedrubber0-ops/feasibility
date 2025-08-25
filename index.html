@@ -267,7 +267,7 @@
                     await window.initializePdfLibraries();
                     console.log('Application initialized successfully');
 
-                    // Setup event listeners
+                    // Setup event listeners for file operations
                     document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
                     document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
                     document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
@@ -276,6 +276,72 @@
                             resetAllLabels();
                         }
                     });
+
+                    // Setup mode toggle
+                    if (modeToggle && gdtResultsContainer) {
+                        modeToggle.addEventListener('click', () => {
+                            isGdtMode = !isGdtMode;
+                            modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
+                            modeToggle.classList.toggle('gdt-mode', isGdtMode);
+                            gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
+                        });
+                    }
+
+                    // Setup zoom controls
+                    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => changePdfScale(-0.25));
+                    if (zoomInBtn) zoomInBtn.addEventListener('click', () => changePdfScale(0.25));
+                    if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => changePdfScale(0, true));
+
+                    // Setup remove balloon buttons click handler
+                    if (reportTableBody) {
+                        reportTableBody.addEventListener('click', handleTableClick);
+                    }
+
+                    // Setup viewer click handler
+                    if (viewer) {
+                        viewer.addEventListener('click', async (event) => {
+                            try {
+                                const canvas = event.target;
+                                if (canvas.tagName !== 'CANVAS' || !ocrData || !pdfDoc) return;
+
+                                const rect = canvas.getBoundingClientRect();
+                                const x = event.clientX - rect.left;
+                                const y = event.clientY - rect.top;
+                                
+                                if (isGdtMode && window.GdtAnalyzer) {
+                                    // GD&T Analysis Mode
+                                    try {
+                                        const imageBlob = await window.GdtAnalyzer.cropImageAtClick(canvas, x, y);
+                                        const results = await window.GdtAnalyzer.analyzeGdtCrop(imageBlob, backendUrlBase);
+                                        
+                                        // Show highlight box
+                                        const highlight = document.createElement('div');
+                                        highlight.className = 'gdt-highlight';
+                                        highlight.style.left = (x - window.GdtAnalyzer.cropSize.width / 2) + 'px';
+                                        highlight.style.top = (y - window.GdtAnalyzer.cropSize.height / 2) + 'px';
+                                        highlight.style.width = window.GdtAnalyzer.cropSize.width + 'px';
+                                        highlight.style.height = window.GdtAnalyzer.cropSize.height + 'px';
+                                        viewer.appendChild(highlight);
+                                        
+                                        // Display results in the table
+                                        const gdtResultsBody = document.getElementById('gdtResultsBody');
+                                        window.GdtAnalyzer.displayResults(results, gdtResultsBody);
+                                        
+                                        setTimeout(() => highlight.remove(), 2000);
+                                    } catch (error) {
+                                        console.error('GD&T analysis error:', error);
+                                        showError(`GD&T analysis failed: ${error.message}`);
+                                    }
+                                } else {
+                                    // Original ballooning mode code
+                                    handleViewerClick(event);
+                                }
+                            } catch (error) {
+                                console.error('Error handling viewer click:', error);
+                                showError('Error processing click: ' + error.message);
+                            }
+                        });
+                    }
                 } catch (error) {
                     console.error('Failed to initialize application:', error);
                     showError('Failed to initialize application: ' + error.message);
@@ -321,74 +387,10 @@
                 }
             }
         });
-            (async function initializeApp() {
-                try {
-                    // Initialize PDF libraries first
-                    console.log('Starting application initialization...');
-                    await window.initializePdfLibraries();
-                    console.log('PDF libraries initialized successfully');
-
-                    // Setup UI event listeners
-                    document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
-                    document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
-                    document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
-                    document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
-                        if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
-                            resetAllLabels();
-                        }
-                    });
-
-                    // Setup GD&T mode
-                    if (modeToggle && gdtResultsContainer) {
-                        modeToggle.addEventListener('click', () => {
-                            isGdtMode = !isGdtMode;
-                            modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
-                            modeToggle.classList.toggle('gdt-mode', isGdtMode);
-                            gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
-                        });
-                    }
-
-                    // Setup viewer click handler
-                    if (viewer) {
-                        viewer.addEventListener('click', async (event) => {
-                            try {
-                                const canvas = event.target;
-                                if (canvas.tagName !== 'CANVAS' || !ocrData || !pdfDoc) return;
-
-                                const rect = canvas.getBoundingClientRect();
-                                const x = event.clientX - rect.left;
-                                const y = event.clientY - rect.top;
-                                
-                                if (isGdtMode) {
-                                    // GD&T Analysis Mode
-                                    const imageBlob = await cropImageAtClick(canvas, x, y);
-                                    await analyzeGdtCrop(imageBlob);
-                                    
-                                    // Show highlight box
-                                    const highlight = document.createElement('div');
-                                    highlight.className = 'gdt-highlight';
-                                    highlight.style.left = (x - cropSize.width / 2) + 'px';
-                                    highlight.style.top = (y - cropSize.height / 2) + 'px';
-                                    highlight.style.width = cropSize.width + 'px';
-                                    highlight.style.height = cropSize.height + 'px';
-                                    viewer.appendChild(highlight);
-                                    
-                                    setTimeout(() => highlight.remove(), 2000);
-                                } else {
-                                    // Original ballooning mode code
-                                    handleViewerClick(event);
-                                }
-                            } catch (error) {
-                                console.error('Error handling viewer click:', error);
-                                showError('Error processing click: ' + error.message);
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error('Failed to initialize application:', error);
-                    showError('Failed to initialize application: ' + error.message);
-                }
-            });
+            // Initialize zoom controls
+            if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => changePdfScale(-0.25));
+            if (zoomInBtn) zoomInBtn.addEventListener('click', () => changePdfScale(0.25));
+            if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => changePdfScale(0, true));
 
             // Utility functions
             function showError(message) {
@@ -751,15 +753,7 @@
             });
         }
 
-        // Mode toggle handler - initialize only if elements exist
-        if (modeToggle && gdtResultsContainer) {
-            modeToggle.addEventListener('click', () => {
-                isGdtMode = !isGdtMode;
-                modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
-                modeToggle.classList.toggle('gdt-mode', isGdtMode);
-                gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
-            });
-        }
+        // Mode toggle is now handled in initializeApp()
 
         async function downloadDocxReport() {
             if (balloonData.length === 0) {
