@@ -382,8 +382,12 @@
             // Event handler functions
             async function handleFileSelect(event) {
                 try {
-                    // Reset the entire application state before processing new file
+                    // Reset all data structures and UI elements
                     resetState();
+                    
+                    // Also clear any GD&T analysis results
+                    const gdtResultsBody = document.getElementById('gdtResultsBody');
+                    if (gdtResultsBody) gdtResultsBody.innerHTML = '';
                     
                     sourceFile = event.target.files[0];
                     if (!sourceFile) return;
@@ -526,8 +530,18 @@
             if (!ocrData || !pdfDoc) return;
             if (event.target.tagName !== 'CANVAS') return;
 
+            // Debug logs to track execution
+            console.log('Click detected on canvas');
+            console.log('OCR Data:', ocrData);
+
             const clickedWord = findWordAtClick(event);
-            if (!clickedWord) return;
+            console.log('Clicked word:', clickedWord);
+
+            if (!clickedWord) {
+                console.log('No word found at click position');
+                showError('No text found at click position. Try clicking directly on text.');
+                return;
+            }
 
             const customLabel = prompt("Enter a label for this balloon:", clickedWord);
             if (!customLabel) return;
@@ -536,9 +550,18 @@
             const canvas = event.target;
             const rect = canvas.getBoundingClientRect();
             
+            // Calculate relative coordinates
             const relativeX = (event.clientX - rect.left) / canvas.width;
             const relativeY = (event.clientY - rect.top) / canvas.height;
 
+            console.log('Creating balloon:', {
+                balloonNumber,
+                label: customLabel,
+                position: { relativeX, relativeY },
+                page: parseInt(canvas.dataset.pageNum, 10)
+            });
+
+            // Add balloon data to table with position info
             addBalloonDataToTable(customLabel, balloonNumber, { 
                 page: parseInt(canvas.dataset.pageNum, 10), 
                 x: relativeX, 
@@ -549,22 +572,40 @@
          function findWordAtClick(event) {
             const targetCanvas = event.target;
             const pageNum = parseInt(targetCanvas.dataset.pageNum, 10);
+            
+            // Debug log for page number
+            console.log('Processing click on page:', pageNum);
+            
             const pageOcrData = ocrData.find(p => p.page === pageNum);
-            if (!pageOcrData) return null;
+            if (!pageOcrData) {
+                console.log('No OCR data found for page:', pageNum);
+                return null;
+            }
             
             const rect = targetCanvas.getBoundingClientRect();
-            // Use the stored pdfScale for accurate calculations
-            const originalWidth = pageOcrData.width;
-            const renderedWidth = targetCanvas.width;
-            // The true scale is based on the original OCR data, not just the render scale
-            const scale = originalWidth / renderedWidth;
-
-            const clickX = (event.clientX - rect.left) * (originalWidth / targetCanvas.width);
+            console.log('Canvas dimensions:', {
+                width: targetCanvas.width,
+                height: targetCanvas.height
+            });
+            
+            // Calculate click coordinates in PDF space
+            const clickX = (event.clientX - rect.left) * (pageOcrData.width / targetCanvas.width);
             const clickY = (event.clientY - rect.top) * (pageOcrData.height / targetCanvas.height);
+            
+            console.log('Click coordinates in PDF space:', { clickX, clickY });
+            console.log('Available words:', pageOcrData.words.length);
+
+            // Add tolerance for click detection (10 pixels)
+            const tolerance = 10 * (pageOcrData.width / targetCanvas.width);
 
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
-                if (clickX >= x0 && clickX <= x1 && clickY >= y0 && clickY <= y1) {
+                // Add tolerance to the bounding box check
+                if (clickX >= (x0 - tolerance) && 
+                    clickX <= (x1 + tolerance) && 
+                    clickY >= (y0 - tolerance) && 
+                    clickY <= (y1 + tolerance)) {
+                    console.log('Found word:', word.text, 'at bbox:', word.bbox);
                     return word.text;
                 }
             }
@@ -825,17 +866,34 @@
         // Mode toggle is now handled in initializeApp()
 
         async function downloadDocxReport() {
-            if (balloonData.length === 0) {
+            // Check if we have data to export based on the current mode
+            const gdtResultsBody = document.getElementById('gdtResultsBody');
+            const hasGdtResults = gdtResultsBody && gdtResultsBody.children.length > 0;
+            
+            if (!isGdtMode && balloonData.length === 0) {
                 showError("No items have been ballooned yet.");
+                return;
+            }
+            if (isGdtMode && !hasGdtResults) {
+                showError("No GD&T analysis results to export.");
                 return;
             }
 
             const reportData = {
                 header: {
-                    "Report Type": "Ballooned Inspection Report",
-                    "Source File": sourceFile.name
+                    "Report Type": isGdtMode ? "GD&T Analysis Report" : "Ballooned Inspection Report",
+                    "Source File": sourceFile.name,
+                    "Analysis Mode": isGdtMode ? "GD&T Analysis" : "Ballooning"
                 },
-                table: {
+                table: isGdtMode ? {
+                    columns: ["Characteristic", "Value", "Datums", "Modifiers"],
+                    rows: Array.from(gdtResultsBody.children).map(row => [
+                        row.cells[0].textContent,
+                        row.cells[1].textContent,
+                        row.cells[2].textContent,
+                        row.cells[3].textContent
+                    ])
+                } : {
                     columns: ["No.", "Parameter", "Value"],
                     rows: balloonData.map(d => [d.number, d.parameter, d.value])
                 }
