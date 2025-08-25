@@ -154,15 +154,30 @@ def generate_report_handler():
         print(f"An error occurred during the AI process: {e}")
         return jsonify({"error": "Failed to generate report from AI model."}), 500
 
-@app.route('/process-drawing-for-gdt', methods=['POST'])
+@app.route('/process-drawing-for-gdt', methods=['POST', 'OPTIONS'])
 def process_drawing_for_gdt_handler():
     """
     Analyzes a document page as an image to extract GD&T symbols and values.
     """
+    print(f"GD&T endpoint called with method: {request.method}")
+    print(f"Request headers: {dict(request.headers)}")
+    
+    # Handle preflight request
+    if request.method == 'OPTIONS':
+        print("Handling OPTIONS preflight request")
+        response = jsonify({"status": "ok"})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response
+
+    print("Starting GD&T processing...")
     if 'sourceFile' not in request.files:
+        print("No sourceFile in request.files")
+        print(f"Files in request: {list(request.files.keys())}")
         return jsonify({"error": "Missing source file"}), 400
 
     source_file = request.files['sourceFile']
+    print(f"Received file: {source_file.filename}")
 
     try:
         print("Starting GD&T processing...")
@@ -401,6 +416,29 @@ def debug_cors():
         "origin": request.headers.get('Origin', 'No origin header'),
         "method": request.method
     })
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Log any uncaught exceptions and ensure CORS headers are added."""
+    print(f"Uncaught exception: {type(e).__name__}: {str(e)}")
+    import traceback
+    print("Traceback:")
+    print(traceback.format_exc())
+    
+    # Create the error response
+    response = jsonify({
+        "error": "Internal server error",
+        "message": str(e),
+        "type": type(e).__name__
+    })
+    response.status_code = 500
+    
+    # Add CORS headers
+    if request.headers.get('Origin'):
+        response.headers['Access-Control-Allow-Origin'] = request.headers['Origin']
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
+    return response
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
