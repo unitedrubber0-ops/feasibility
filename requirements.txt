@@ -5,3 +5,4 @@ python-docx
 google-generativeai
 gunicorn  # Production web server
 PyMuPDF
+Pillow  # For image processing
