@@ -184,11 +184,40 @@ def process_drawing_for_gdt_handler():
             print(f"Error during image conversion: {str(e)}")
             raise
 
+        # --- FINAL, PRODUCTION-HARDENED MULTIMODAL PROMPT ---
         prompt = [
-            "You are an expert in Geometric Dimensioning and Tolerancing (GD&T) based on ASME standards.",
-            "Analyze the following engineering drawing. Identify all features, their nominal values, tolerances, and any GD&T symbols.",
-            "Return the findings as a structured JSON object with a 'features' key.",
-            "Each feature in the list should have 'parameter_name', 'nominal_value', 'tolerance', and 'gdt_symbol' (if present).",
+            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) adhering to the ASME Y14.5 standard. Your task is to perform a comprehensive analysis of the provided engineering drawing.",
+            "Analyze the entire image, including all views, notes, and title block information. Identify all explicit dimensions and GD&T feature control frames.",
+            "Return your findings as a single, raw JSON object with two top-level keys: 'dimensions' and 'gdt_callouts'. Do not include markdown backticks.",
+            
+            # Instructions for simple dimensions
+            "The 'dimensions' key should contain a list of objects, where each object has 'parameter_name', 'nominal_value', and 'tolerance'.",
+
+            # Specific, detailed instructions for parsing GD&T frames
+            "The 'gdt_callouts' key should contain a list of objects. For each GD&T feature control frame (the rectangular boxes), you must extract the following components into a dedicated object:",
+            " - 'gdt_symbol_name': The name of the geometric characteristic (e.g., 'Position', 'Profile of a Surface', 'Perpendicularity').",
+            " - 'tolerance_value': The numerical tolerance value.",
+            " - 'diameter_symbol': A boolean (true/false) indicating if a Ø symbol is present.",
+            " - 'material_condition_modifier': The material condition symbol name (e.g., 'MMC', 'LMC') if present.",
+            " - 'datums': A list of datum objects, where each datum has 'datum_letter' and 'datum_material_condition' (e.g., 'MMC') if present.",
+            
+            # Give a clear example to guide the AI
+            "For example, if you see a frame that reads 'Position | Ø0.1 M | A M | B', your JSON output for that feature should be:",
+            '''
+            {
+              "gdt_symbol_name": "Position",
+              "tolerance_value": "0.1",
+              "diameter_symbol": true,
+              "material_condition_modifier": "MMC",
+              "datums": [
+                { "datum_letter": "A", "datum_material_condition": "MMC" },
+                { "datum_letter": "B", "datum_material_condition": null }
+              ]
+            }
+            ''',
+            
+            # The final instruction with the image
+            "Now, analyze this image and provide the complete JSON output:",
             gdt_image,
         ]
         response = model.generate_content(prompt)
