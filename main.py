@@ -48,7 +48,10 @@ def generate_with_retry(model, prompt, max_retries=3, retry_delay=5):
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["https://feasibility-1.onrender.com", "http://1227.0.0.1:5001"]}})
+CORS(app, resources={r"/*": {"origins": [
+    "https://feasibility-1.onrender.com",  # Production frontend URL
+    "http://127.0.0.1:5001"  # Local development URL
+]}})
 
 # --- Gemini API Configuration ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
