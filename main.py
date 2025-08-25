@@ -342,52 +342,5 @@ def get_value_for_label_handler():
         print(f"An error occurred during AI processing for label '{label}': {e}")
         return jsonify({"error": f"AI processing failed: {str(e)}"}), 500
 
-@app.route('/process-drawing-for-gdt', methods=['POST'])
-def process_drawing_for_gdt_handler():
-    """
-    Analyzes a document page as an image to extract GD&T symbols and values.
-    """
-    if 'sourceFile' not in request.files:
-        return jsonify({"error": "Missing source file"}), 400
-
-    source_file = request.files['sourceFile']
-
-    try:
-        file_stream = io.BytesIO(source_file.read())
-        file_type = source_file.filename.split('.')[-1]
-        
-        # --- Step 1: Convert the first page to a high-res image ---
-        doc = fitz.open(stream=file_stream, filetype=file_type)
-        page = doc.load_page(0)  # Process the first page
-        pix = page.get_pixmap(dpi=300)  # Use high DPI for accuracy
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        
-        doc.close()
-
-        # --- Step 2: Send the image to the multimodal AI model ---
-        model = genai.GenerativeModel("gemini-1.5-pro-latest")
-
-        # --- Step 3: Create a powerful multimodal prompt ---
-        prompt = [
-            "You are an expert in Geometric Dimensioning and Tolerancing (GD&T) based on ASME standards.",
-            "Analyze the following engineering drawing. Identify all features, their nominal values, tolerances, and any GD&T symbols.",
-            "Return the findings as a structured JSON object with a 'features' key.",
-            "Each feature in the list should have 'parameter_name', 'nominal_value', 'tolerance', and 'gdt_symbol' (if present).",
-            img,  # This is where you pass the actual image object
-        ]
-
-        # Use the standard generate_content method, which can handle multimodal prompts
-        response = model.generate_content(prompt)
-        
-        # Clean the response to get pure JSON
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        response_json = json.loads(cleaned_text)
-
-        return jsonify(response_json)
-
-    except Exception as e:
-        print(f"An error occurred during GD&T processing: {e}")
-        return jsonify({"error": f"Failed to process drawing for GD&T: {str(e)}"}), 500
-
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
