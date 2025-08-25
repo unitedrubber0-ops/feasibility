@@ -345,6 +345,34 @@
                 }
             })();
 
+            // State Management Functions
+            function resetState() {
+                // Reset all data structures
+                sourceFile = null;
+                ocrData = null;
+                pdfDoc = null;
+                balloonData = [];
+                balloonCounter = 1;
+                
+                // Reset UI elements
+                viewer.innerHTML = '';
+                reportTableBody.innerHTML = '';
+                document.querySelectorAll('.balloon').forEach(b => b.remove());
+                changePdfScale(0, true);
+                
+                // Reset visibility states
+                resultsSection.classList.add('hidden');
+                placeholderText.classList.add('hidden');
+                errorMessage.classList.add('hidden');
+                gdtResultsContainer.classList.add('hidden');
+                zoomControls.classList.add('hidden');
+                
+                // Clear any GD&T highlights
+                document.querySelectorAll('.gdt-highlight').forEach(h => h.remove());
+                
+                console.log('Application state has been reset');
+            }
+
             // Utility functions
             function showError(message) {
                 errorMessage.textContent = message;
@@ -354,15 +382,13 @@
             // Event handler functions
             async function handleFileSelect(event) {
                 try {
+                    // Reset the entire application state before processing new file
+                    resetState();
+                    
                     sourceFile = event.target.files[0];
                     if (!sourceFile) return;
 
-                    // Reset UI
-                    viewer.innerHTML = ''; reportTableBody.innerHTML = '';
-                    document.querySelectorAll('.balloon').forEach(b => b.remove());
-                    ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
-                    resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
-                    errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
+                    loaderText.textContent = 'Processing document...';
                     loader.classList.remove('hidden');
 
                     const formData = new FormData();
