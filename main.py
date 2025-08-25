@@ -167,18 +167,19 @@ def process_drawing_for_gdt_handler():
         page = doc.load_page(0)
 
         # --- THIS IS THE FIX ---
-        # Reduce DPI to 150 to significantly lower memory usage.
-        pix = page.get_pixmap(dpi=150)
-        
-        img_buffer = io.BytesIO()
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        img.save(img_buffer, format="PNG")
-        img_buffer.seek(0)
-        
-        doc.close()
-        
-        model = genai.GenerativeModel("gemini-1.5-pro-latest")
-        gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
+        try:
+            # Reduce DPI to 150 to significantly lower memory usage.
+            pix = page.get_pixmap(dpi=150)
+            
+            img_buffer = io.BytesIO()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img.save(img_buffer, format="PNG")
+            img_buffer.seek(0)
+            
+            doc.close()
+            
+            model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
         except Exception as e:
             print(f"Error during image conversion: {str(e)}")
             raise
