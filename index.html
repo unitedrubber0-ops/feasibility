@@ -398,39 +398,7 @@
         }
 
         // --- CORE FUNCTIONS ---
-        async function handleFileSelect(event) {
-            try {
-                sourceFile = event.target.files[0];
-                if (!sourceFile) return;
-
-                // Reset UI
-                viewer.innerHTML = ''; reportTableBody.innerHTML = '';
-                document.querySelectorAll('.balloon').forEach(b => b.remove());
-                ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
-                resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
-                errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
-                loader.classList.remove('hidden');
-
-                const formData = new FormData();
-                formData.append('sourceFile', sourceFile);
-                
-                const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, { method: 'POST', body: formData });
-                if (!response.ok) throw new Error((await response.json()).error);
-                
-                const data = await response.json();
-                ocrData = data.ocr_results;
-                console.log("OCR data received and cached.");
-
-                document.getElementById('zoom-controls').classList.remove('hidden');
-                await renderPdf(sourceFile, pdfScale);
-            } catch (error) {
-                showError(`Initialization failed: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
-            }
-        }
-
-         async function renderPdf(file, scale) {
+        async function renderPdf(file, scale) {
             try {
                 // Ensure PDF.js is properly loaded
                 if (!window.pdfjsLib) {
