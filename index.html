@@ -276,42 +276,46 @@
                     showError('Failed to initialize application: ' + error.message);
                 }
             })();
-        });
 
-        // Event handler functions
-        async function handleFileSelect(event) {
-            try {
-                sourceFile = event.target.files[0];
-                if (!sourceFile) return;
-
-                // Reset UI
-                viewer.innerHTML = ''; reportTableBody.innerHTML = '';
-                document.querySelectorAll('.balloon').forEach(b => b.remove());
-                ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
-                resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
-                errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
-                loader.classList.remove('hidden');
-
-                const formData = new FormData();
-                formData.append('sourceFile', sourceFile);
-                
-                const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, { method: 'POST', body: formData });
-                if (!response.ok) throw new Error((await response.json()).error);
-                
-                const data = await response.json();
-                ocrData = data.ocr_results;
-                console.log("OCR data received and cached.");
-
-                document.getElementById('zoom-controls').classList.remove('hidden');
-                await renderPdf(sourceFile, pdfScale);
-            } catch (error) {
-                showError(`Initialization failed: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
+            // Utility functions
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.classList.remove('hidden');
             }
-        }
 
-        document.addEventListener('DOMContentLoaded', () => {
+            // Event handler functions
+            async function handleFileSelect(event) {
+                try {
+                    sourceFile = event.target.files[0];
+                    if (!sourceFile) return;
+
+                    // Reset UI
+                    viewer.innerHTML = ''; reportTableBody.innerHTML = '';
+                    document.querySelectorAll('.balloon').forEach(b => b.remove());
+                    ocrData = null; pdfDoc = null; balloonData = []; balloonCounter = 1; changePdfScale(0, true);
+                    resultsSection.classList.add('hidden'); placeholderText.classList.add('hidden');
+                    errorMessage.classList.add('hidden'); loaderText.textContent = 'Processing document...';
+                    loader.classList.remove('hidden');
+
+                    const formData = new FormData();
+                    formData.append('sourceFile', sourceFile);
+                    
+                    const response = await fetch(`${backendUrlBase}/process-document-for-ocr`, { method: 'POST', body: formData });
+                    if (!response.ok) throw new Error((await response.json()).error);
+                    
+                    const data = await response.json();
+                    ocrData = data.ocr_results;
+                    console.log("OCR data received and cached.");
+
+                    zoomControls.classList.remove('hidden');
+                    await renderPdf(sourceFile, pdfScale);
+                } catch (error) {
+                    showError(`Initialization failed: ${error.message}`);
+                } finally {
+                    loader.classList.add('hidden');
+                }
+            }
+        });
             (async function initializeApp() {
                 try {
                     // Initialize PDF libraries first
@@ -379,33 +383,32 @@
                     console.error('Failed to initialize application:', error);
                     showError('Failed to initialize application: ' + error.message);
                 }
-            })();
-        });
+            });
 
-        // Reset all labels function
-        function resetAllLabels() {
-            // Clear all balloon markers
-            document.querySelectorAll('.balloon').forEach(b => b.remove());
-            // Reset the balloon data array
-            balloonData = [];
-            // Clear the report table
-            if (reportTableBody) reportTableBody.innerHTML = '';
-            // Reset the balloon counter
-            balloonCounter = 1;
-            // Hide results section if it's visible
-            resultsSection.classList.add('hidden');
-        }
+            // Reset all labels function
+            function resetAllLabels() {
+                // Clear all balloon markers
+                document.querySelectorAll('.balloon').forEach(b => b.remove());
+                // Reset the balloon data array
+                balloonData = [];
+                // Clear the report table
+                if (reportTableBody) reportTableBody.innerHTML = '';
+                // Reset the balloon counter
+                balloonCounter = 1;
+                // Hide results section if it's visible
+                resultsSection.classList.add('hidden');
+            }
 
-        // --- CORE FUNCTIONS ---
-        async function renderPdf(file, scale) {
-            try {
-                // Ensure PDF.js is properly loaded
-                if (!window.pdfjsLib) {
-                    throw new Error('PDF.js library not loaded');
-                }
-                
-                // Set worker source using window.pdfjsLib
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            // --- CORE FUNCTIONS ---
+            async function renderPdf(file, scale) {
+                try {
+                    // Ensure PDF.js is properly loaded
+                    if (!window.pdfjsLib) {
+                        throw new Error('PDF.js library not loaded');
+                    }
+                    
+                    // Set worker source using window.pdfjsLib
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
                 
                 // Use Promise-based FileReader
                 const arrayBuffer = await new Promise((resolve, reject) => {
