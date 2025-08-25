@@ -154,134 +154,46 @@ def generate_report_handler():
         print(f"An error occurred during the AI process: {e}")
         return jsonify({"error": "Failed to generate report from AI model."}), 500
 
-@app.route('/process-drawing-for-gdt', methods=['POST', 'OPTIONS'])
+@app.route('/process-drawing-for-gdt', methods=['POST'])
 def process_drawing_for_gdt_handler():
-    """
-    Analyzes a document page as an image to extract GD&T symbols and values.
-    """
-    print("\n=== GD&T Processing Started ===")
-    
-    # Handle preflight request
-    if request.method == 'OPTIONS':
-        print("Handling OPTIONS preflight request")
-        response = jsonify({"status": "ok"})
-        return response
-
-    print("Starting GD&T processing...")
+    """Analyzes a document page as an image to extract GD&T symbols and values."""
     if 'sourceFile' not in request.files:
-        print("No sourceFile in request.files")
-        print(f"Files in request: {list(request.files.keys())}")
         return jsonify({"error": "Missing source file"}), 400
-
+    source_file = request.files['sourceFile']
     try:
-        source_file = request.files['sourceFile']
-        print(f"Processing file: {source_file.filename}")
+        file_stream = io.BytesIO(source_file.read())
+        file_type = source_file.filename.split('.')[-1]
+        doc = fitz.open(stream=file_stream, filetype=file_type)
+        page = doc.load_page(0)
+
+        # --- THIS IS THE FIX ---
+        # Reduce DPI to 150 to significantly lower memory usage.
+        pix = page.get_pixmap(dpi=150)
         
-        # Check file size
-        file_content = source_file.read()
-        file_size = len(file_content)
-        print(f"File size: {file_size} bytes")
+        img_buffer = io.BytesIO()
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img.save(img_buffer, format="PNG")
+        img_buffer.seek(0)
         
-        if file_size == 0:
-            return jsonify({"error": "Empty file received"}), 400
-            
-        # Reset file pointer
-        source_file.seek(0)
+        doc.close()
         
-        # Create a new BytesIO object
-        file_stream = io.BytesIO(file_content)
-        print("File loaded into memory successfully")
-        
-        # Get file type
-        file_type = source_file.filename.split('.')[-1].lower()
-        print(f"File type: {file_type}")
-        
-        if file_type not in ['pdf', 'docx']:
-            return jsonify({"error": "Unsupported file type. Please upload a PDF or DOCX file."}), 400
-        try:
-            print("\n--- Step 1: Document Loading ---")
-            print(f"Opening document of type: {file_type}")
-            doc = fitz.open(stream=file_stream, filetype=file_type)
-            print(f"Document opened successfully with {doc.page_count} pages")
-            
-            if doc.page_count == 0:
-                doc.close()
-                return jsonify({"error": "Document has no pages"}), 400
-                
-            print("\n--- Step 2: Page Processing ---")
-            page = doc.load_page(0)  # Process the first page
-            print(f"Page dimensions: {page.rect.width}x{page.rect.height}")
-            
-            print("\n--- Step 3: Image Conversion ---")
-            try:
-                pix = page.get_pixmap(dpi=300)  # Use high DPI for accuracy
-                print(f"Pixmap created: {pix.width}x{pix.height}, stride: {pix.stride}")
-                print(f"Pixmap properties: colorspace={pix.colorspace}, alpha={pix.alpha}")
-                
-                # Convert PyMuPDF pixmap to PIL Image
-                img_data = pix.samples
-                print(f"Image data size: {len(img_data)} bytes")
-                
-                if pix.alpha:
-                    print("Converting RGBA image to RGB")
-                    img = Image.frombytes("RGBA", [pix.width, pix.height], img_data).convert("RGB")
-                else:
-                    print("Creating RGB image")
-                    img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
-                
-                print(f"PIL Image created: {img.size}, mode={img.mode}")
-                
-                # Verify image is valid
-                img.verify()
-                print("Image verified successfully")
-                
-            except Exception as e:
-                print(f"Error during image conversion: {str(e)}")
-                raise
-                
-            finally:
-                doc.close()
-                print("Document closed")
+        model = genai.GenerativeModel("gemini-1.5-pro-latest")
+        gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
         except Exception as e:
             print(f"Error during image conversion: {str(e)}")
             raise
 
-        print("Configuring AI model...")
-        # --- Step 2: Send the image to the multimodal AI model ---
-        safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
-        generation_config = genai.GenerationConfig(max_output_tokens=8192, temperature=0.1)
-        
-        if not GEMINI_API_KEY:
-            print("Gemini API key not found!")
-            return jsonify({"error": "Gemini API key is not configured."}), 500
-            
-        model = genai.GenerativeModel("gemini-2.5-pro", generation_config=generation_config, safety_settings=safety_settings)
-        print("AI model configured successfully")
-
-        # --- Step 3: Create a powerful multimodal prompt ---
-        print("Preparing multimodal prompt...")
         prompt = [
             "You are an expert in Geometric Dimensioning and Tolerancing (GD&T) based on ASME standards.",
             "Analyze the following engineering drawing. Identify all features, their nominal values, tolerances, and any GD&T symbols.",
             "Return the findings as a structured JSON object with a 'features' key.",
             "Each feature in the list should have 'parameter_name', 'nominal_value', 'tolerance', and 'gdt_symbol' (if present).",
-            img,  # This is where you pass the actual image object
+            gdt_image,
         ]
-
-        print("Sending request to Gemini API...")
-        # Use the robust retry function we already have
-        response_text = generate_with_retry(model, prompt)
-        print("Received response from Gemini API")
-        
-        try:
-            response_json = json.loads(response_text)
-            print("Successfully parsed JSON response")
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {str(e)}")
-            print(f"Raw response: {response_text}")
-            raise
-
-        return jsonify(response_json)
+        response = model.generate_content(prompt)
+        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
+        response_json = json.loads(cleaned_text)
+        return jsonify(response_json)        return jsonify(response_json)
 
     except Exception as e:
         print(f"An error occurred during GD&T processing: {e}")
