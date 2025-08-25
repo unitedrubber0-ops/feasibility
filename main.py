@@ -156,23 +156,51 @@ def process_drawing_for_gdt_handler():
     source_file = request.files['sourceFile']
 
     try:
+        print("Starting GD&T processing...")
         file_stream = io.BytesIO(source_file.read())
-        file_type = source_file.filename.split('.')[-1]
+        file_type = source_file.filename.split('.')[-1].lower()
         
         # --- Step 1: Convert the first page to a high-res image ---
-        doc = fitz.open(stream=file_stream, filetype=file_type)
-        page = doc.load_page(0)  # Process the first page
-        pix = page.get_pixmap(dpi=300)  # Use high DPI for accuracy
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        
-        doc.close()
+        try:
+            print(f"Opening document of type: {file_type}")
+            doc = fitz.open(stream=file_stream, filetype=file_type)
+            print("Document opened successfully")
+            
+            page = doc.load_page(0)  # Process the first page
+            print("Page loaded successfully")
+            
+            pix = page.get_pixmap(dpi=300)  # Use high DPI for accuracy
+            print(f"Pixmap created: {pix.width}x{pix.height}")
+            
+            # Convert PyMuPDF pixmap to PIL Image
+            img_data = pix.samples
+            if pix.alpha:  # Handle alpha channel if present
+                print("Converting RGBA image to RGB")
+                img = Image.frombytes("RGBA", [pix.width, pix.height], img_data).convert("RGB")
+            else:
+                print("Creating RGB image")
+                img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+            
+            print("Image conversion successful")
+            doc.close()
+        except Exception as e:
+            print(f"Error during image conversion: {str(e)}")
+            raise
 
+        print("Configuring AI model...")
         # --- Step 2: Send the image to the multimodal AI model ---
         safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
         generation_config = genai.GenerationConfig(max_output_tokens=8192, temperature=0.1)
+        
+        if not GEMINI_API_KEY:
+            print("Gemini API key not found!")
+            return jsonify({"error": "Gemini API key is not configured."}), 500
+            
         model = genai.GenerativeModel("gemini-2.5-pro", generation_config=generation_config, safety_settings=safety_settings)
+        print("AI model configured successfully")
 
         # --- Step 3: Create a powerful multimodal prompt ---
+        print("Preparing multimodal prompt...")
         prompt = [
             "You are an expert in Geometric Dimensioning and Tolerancing (GD&T) based on ASME standards.",
             "Analyze the following engineering drawing. Identify all features, their nominal values, tolerances, and any GD&T symbols.",
@@ -181,12 +209,18 @@ def process_drawing_for_gdt_handler():
             img,  # This is where you pass the actual image object
         ]
 
-        # Use the standard generate_content method, which can handle multimodal prompts
-        response = model.generate_content(prompt)
+        print("Sending request to Gemini API...")
+        # Use the robust retry function we already have
+        response_text = generate_with_retry(model, prompt)
+        print("Received response from Gemini API")
         
-        # Clean the response to get pure JSON
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        response_json = json.loads(cleaned_text)
+        try:
+            response_json = json.loads(response_text)
+            print("Successfully parsed JSON response")
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {str(e)}")
+            print(f"Raw response: {response_text}")
+            raise
 
         return jsonify(response_json)
 
