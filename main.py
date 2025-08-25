@@ -158,116 +158,51 @@ def generate_report_handler():
         print(f"An error occurred during the AI process: {e}")
         return jsonify({"error": "Failed to generate report from AI model."}), 500
 
-@app.route('/process-drawing-for-gdt', methods=['POST'])
-def process_drawing_for_gdt_handler():
-    """Analyzes a document page as an image to extract GD&T symbols and values."""
-    if 'sourceFile' not in request.files:
-        return jsonify({"error": "Missing source file"}), 400
+@app.route('/analyze-gdt-at-point', methods=['POST'])
+def analyze_gdt_at_point_handler():
+    """
+    Analyzes a full drawing page, focusing on the GD&T feature
+    closest to the provided X, Y coordinates.
+    """
+    if 'sourceFile' not in request.files or 'x' not in request.form or 'y' not in request.form or 'page_num' not in request.form:
+        return jsonify({"error": "Missing source file or coordinate data"}), 400
+
     source_file = request.files['sourceFile']
+    x_coord = float(request.form['x'])
+    y_coord = float(request.form['y'])
+    page_num = int(request.form['page_num'])
+
     try:
         file_stream = io.BytesIO(source_file.read())
         file_type = source_file.filename.split('.')[-1]
+        
+        # --- Step 1: Render the specified page as a high-res image ---
         doc = fitz.open(stream=file_stream, filetype=file_type)
-        page = doc.load_page(0)
-
-        # --- THIS IS THE FIX ---
-        try:
-            # Reduce DPI to 150 to significantly lower memory usage.
-            pix = page.get_pixmap(dpi=150)
+        if page_num < 1 or page_num > doc.page_count:
+            return jsonify({"error": "Invalid page number"}), 400
             
-            img_buffer = io.BytesIO()
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            img.save(img_buffer, format="PNG")
-            img_buffer.seek(0)
-            
-            doc.close()
-            
-            model = genai.GenerativeModel("gemini-1.5-pro-latest")
-            gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
-        except Exception as e:
-            print(f"Error during image conversion: {str(e)}")
-            raise
-
-        # --- FINAL, PRODUCTION-HARDENED MULTIMODAL PROMPT ---
-        prompt = [
-            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) adhering to the ASME Y14.5 standard. Your task is to perform a comprehensive analysis of the provided engineering drawing.",
-            "Analyze the entire image, including all views, notes, and title block information. Identify all explicit dimensions and GD&T feature control frames.",
-            "Return your findings as a single, raw JSON object with two top-level keys: 'dimensions' and 'gdt_callouts'. Do not include markdown backticks.",
-            
-            # Instructions for simple dimensions
-            "The 'dimensions' key should contain a list of objects, where each object has 'parameter_name', 'nominal_value', and 'tolerance'.",
-
-            # Specific, detailed instructions for parsing GD&T frames
-            "The 'gdt_callouts' key should contain a list of objects. For each GD&T feature control frame (the rectangular boxes), you must extract the following components into a dedicated object:",
-            " - 'gdt_symbol_name': The name of the geometric characteristic (e.g., 'Position', 'Profile of a Surface', 'Perpendicularity').",
-            " - 'tolerance_value': The numerical tolerance value.",
-            " - 'diameter_symbol': A boolean (true/false) indicating if a Ø symbol is present.",
-            " - 'material_condition_modifier': The material condition symbol name (e.g., 'MMC', 'LMC') if present.",
-            " - 'datums': A list of datum objects, where each datum has 'datum_letter' and 'datum_material_condition' (e.g., 'MMC') if present.",
-            
-            # Give a clear example to guide the AI
-            "For example, if you see a frame that reads 'Position | Ø0.1 M | A M | B', your JSON output for that feature should be:",
-            '''
-            {
-              "gdt_symbol_name": "Position",
-              "tolerance_value": "0.1",
-              "diameter_symbol": true,
-              "material_condition_modifier": "MMC",
-              "datums": [
-                { "datum_letter": "A", "datum_material_condition": "MMC" },
-                { "datum_letter": "B", "datum_material_condition": null }
-              ]
-            }
-            ''',
-            
-            # The final instruction with the image
-            "Now, analyze this image and provide the complete JSON output:",
-            gdt_image,
-        ]
-        response = model.generate_content(prompt)
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        # Remove any trailing commas before closing brackets or braces
-        cleaned_text = cleaned_text.replace(",]", "]").replace(",}", "}")
-        try:
-            response_json = json.loads(cleaned_text)
-            return jsonify(response_json)
-        except json.JSONDecodeError as json_err:
-            print(f"JSON Parsing Error: {json_err}")
-            print(f"Problematic JSON text: {cleaned_text}")
-            raise Exception(f"Failed to parse GD&T response: {json_err}")
-
-    except Exception as e:
-        print(f"An error occurred during GD&T processing: {e}")
-        raise
-
-@app.route('/analyze-gdt-crop', methods=['POST'])
-def analyze_gdt_crop_handler():
-    """
-    Analyzes a small, cropped image of a feature control frame.
-    """
-    if 'image_crop' not in request.files:
-        return jsonify({"error": "Missing image crop"}), 400
-
-    image_crop_file = request.files['image_crop']
-    
-    try:
-        # Convert the file to an in-memory image object
-        img_buffer = io.BytesIO(image_crop_file.read())
-        img = Image.open(img_buffer)
-
-        # --- STANDARDIZED MODEL ---
+        page = doc.load_page(page_num - 1) # fitz is 0-indexed
+        pix = page.get_pixmap(dpi=200) # Good balance of quality and performance
+        
+        img_buffer = io.BytesIO()
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img.save(img_buffer, format="PNG")
+        img_buffer.seek(0)
+        
+        doc.close()
+        
+        # --- Step 2: Create the context-aware prompt ---
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
         gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
 
-        # Use the same expert-level prompt as before
         prompt = [
             "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard.",
-            "Analyze the following cropped image of a single feature control frame.",
+            "Analyze the provided engineering drawing image.",
+            f"A user has clicked on the coordinate (x={int(x_coord)}, y={int(y_coord)}). Your task is to locate the single GD&T Feature Control Frame closest to this point and parse its contents.",
             "Return the findings as a single, raw JSON object representing this one feature.",
-            "The object should have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
-            # Give a clear example
-            "For example, for an image of 'Position | Ø0.1 M | A M | B', your JSON output should be:",
-            '''
+            "The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
+            "For example, for a frame that reads 'Position | Ø0.1 M | A M | B', your JSON output should be:",
+            """
             {
               "gdt_symbol_name": "Position",
               "tolerance_value": "0.1",
@@ -278,26 +213,21 @@ def analyze_gdt_crop_handler():
                 { "datum_letter": "B", "datum_material_condition": null }
               ]
             }
-            ''',
-            "Now, analyze this image:",
+            """,
+            "If no valid GD&T frame is near the click, return an empty JSON object `{}`.",
+            "Now, analyze this image with the click focus:",
             gdt_image,
         ]
         
         response = model.generate_content(prompt)
         cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        # Remove any trailing commas before closing brackets or braces
-        cleaned_text = cleaned_text.replace(",]", "]").replace(",}", "}")
-        try:
-            response_json = json.loads(cleaned_text)
-            return jsonify(response_json)
-        except json.JSONDecodeError as json_err:
-            print(f"JSON Parsing Error: {json_err}")
-            print(f"Problematic JSON text: {cleaned_text}")
-            raise Exception(f"Failed to parse GD&T response: {json_err}")
+        response_json = json.loads(cleaned_text)
+        
+        return jsonify(response_json)
 
     except Exception as e:
-        print(f"An error occurred during GD&T crop analysis: {e}")
-        return jsonify({"error": f"Failed to analyze GD&T crop: {str(e)}"}), 500
+        print(f"An error occurred during context-aware GD&T analysis: {e}")
+        return jsonify({"error": f"Failed to analyze GD&T feature: {str(e)}"}), 500
 
 # --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])

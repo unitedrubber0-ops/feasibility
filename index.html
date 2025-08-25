@@ -308,30 +308,27 @@
                                 const x = event.clientX - rect.left;
                                 const y = event.clientY - rect.top;
                                 
-                                if (isGdtMode && window.GdtAnalyzer) {
-                                    // GD&T Analysis Mode
-                                    try {
-                                        const imageBlob = await window.GdtAnalyzer.cropImageAtClick(canvas, x, y);
-                                        const results = await window.GdtAnalyzer.analyzeGdtCrop(imageBlob, backendUrlBase);
-                                        
-                                        // Show highlight box
-                                        const highlight = document.createElement('div');
-                                        highlight.className = 'gdt-highlight';
-                                        highlight.style.left = (x - window.GdtAnalyzer.cropSize.width / 2) + 'px';
-                                        highlight.style.top = (y - window.GdtAnalyzer.cropSize.height / 2) + 'px';
-                                        highlight.style.width = window.GdtAnalyzer.cropSize.width + 'px';
-                                        highlight.style.height = window.GdtAnalyzer.cropSize.height + 'px';
-                                        viewer.appendChild(highlight);
-                                        
-                                        // Display results in the table
-                                        const gdtResultsBody = document.getElementById('gdtResultsBody');
-                                        window.GdtAnalyzer.displayResults(results, gdtResultsBody);
-                                        
-                                        setTimeout(() => highlight.remove(), 2000);
-                                    } catch (error) {
-                                        console.error('GD&T analysis error:', error);
-                                        showError(`GD&T analysis failed: ${error.message}`);
-                                    }
+                                if (isGdtMode) {
+                                    const pageNum = parseInt(canvas.dataset.pageNum, 10);
+                                    const rect = canvas.getBoundingClientRect();
+                                    
+                                    // Get the click coordinates relative to the original PDF page size
+                                    const originalPage = ocrData.find(p => p.page === pageNum);
+                                    const clickX = (event.clientX - rect.left) * (originalPage.width / canvas.width);
+                                    const clickY = (event.clientY - rect.top) * (originalPage.height / canvas.height);
+
+                                    await analyzeGdtAtPoint(pageNum, clickX, clickY);
+                                    
+                                    // Show visual feedback
+                                    const highlight = document.createElement('div');
+                                    highlight.className = 'gdt-highlight';
+                                    highlight.style.left = (x - 150) + 'px';  // 300/2 for center
+                                    highlight.style.top = (y - 100) + 'px';   // 200/2 for center
+                                    highlight.style.width = '300px';
+                                    highlight.style.height = '200px';
+                                    viewer.appendChild(highlight);
+                                    setTimeout(() => highlight.remove(), 2000);
+
                                 } else {
                                     // Original ballooning mode code
                                     handleViewerClick(event);
@@ -751,6 +748,52 @@
             return new Promise(resolve => {
                 tempCanvas.toBlob(resolve, 'image/png');
             });
+        }
+
+        // GD&T Analysis at Point
+        async function analyzeGdtAtPoint(pageNum, pdfX, pdfY) {
+            loaderText.textContent = 'Analyzing GD&T feature...';
+            loader.classList.remove('hidden');
+            const formData = new FormData();
+            formData.append('sourceFile', sourceFile);
+            formData.append('page_num', pageNum);
+            formData.append('x', pdfX);
+            formData.append('y', pdfY);
+            
+            try {
+                const response = await fetch(`${backendUrlBase}/analyze-gdt-at-point`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error((await response.json()).error);
+                
+                const data = await response.json();
+                
+                // Check if the AI returned an empty object
+                if (Object.keys(data).length === 0) {
+                    showError("No valid GD&T feature was found near your click.");
+                    return;
+                }
+
+                // Create a formatted HTML result for the GD&T table
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${data.gdt_symbol_name}</td>
+                    <td>${data.diameter_symbol ? 'Ø' : ''}${data.tolerance_value}</td>
+                    <td>${data.datums.map(d => 
+                        d.datum_material_condition ? 
+                        `${d.datum_letter} (${d.datum_material_condition})` : 
+                        d.datum_letter
+                    ).join(' → ')}</td>
+                    <td>${data.material_condition_modifier || 'None'}</td>
+                `;
+                
+                const gdtResultsBody = document.getElementById('gdtResultsBody');
+                gdtResultsBody.appendChild(tr);
+                gdtResultsContainer.classList.remove('hidden');
+
+            } catch (error) {
+                showError(`GD&T analysis failed: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+            }
         }
 
         // Mode toggle is now handled in initializeApp()
