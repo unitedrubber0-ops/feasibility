@@ -131,6 +131,7 @@
                          <div class="flex justify-between items-center mb-4">
                             <h3 class="text-xl font-semibold">Ballooned Items</h3>
                             <div>
+                                <button id="gdt-extract-btn" class="bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 mr-2">Extract GD&T Data</button>
                                 <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
                                 <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download .docx</button>
                             </div>
@@ -444,7 +445,70 @@
                 }
             }
         }
-        
+
+        // --- GD&T Analysis Function ---
+        const gdtExtractBtn = document.getElementById('gdt-extract-btn');
+        gdtExtractBtn.addEventListener('click', async () => {
+            if (!sourceFile) {
+                showError("Please upload a source file first.");
+                return;
+            }
+
+            loaderText.textContent = 'Analyzing drawing for GD&T symbols...';
+            loader.classList.remove('hidden');
+            // Clear the existing ballooning table
+            reportTableBody.innerHTML = ''; 
+            balloonData = [];
+
+            const formData = new FormData();
+            formData.append('sourceFile', sourceFile);
+
+            try {
+                const response = await fetch(`${backendUrlBase}/process-drawing-for-gdt`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error!`);
+                }
+
+                const reportData = await response.json();
+                displayGdtResults(reportData);
+                resultsSection.classList.remove('hidden');
+                placeholderText.classList.add('hidden');
+
+            } catch (error) {
+                showError(`An error occurred: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+            }
+        });
+
+        function displayGdtResults(data) {
+            reportTableBody.innerHTML = ''; // Clear previous results
+            
+            if (data.features && Array.isArray(data.features)) {
+                data.features.forEach((feature, index) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="px-4 py-3">${index + 1}</td>
+                        <td class="px-4 py-3 font-medium">${feature.parameter_name || ''}</td>
+                        <td class="px-4 py-3">
+                            Value: ${feature.nominal_value || ''}<br>
+                            Tolerance: ${feature.tolerance || 'N/A'}<br>
+                            GD&T Symbol: ${feature.gdt_symbol || 'None'}
+                        </td>
+                        <td class="px-4 py-3 text-center">—</td>
+                    `;
+                    reportTableBody.appendChild(tr);
+                });
+            } else {
+                showError("No GD&T features were found in the drawing.");
+            }
+        }
+
         // --- (downloadPdfWithBalloons and downloadDocxReport are the same) ---
         async function downloadPdfWithBalloons() {
             // Check required conditions
