@@ -176,13 +176,12 @@ def analyze_gdt_at_point_handler():
         file_stream = io.BytesIO(source_file.read())
         file_type = source_file.filename.split('.')[-1]
         
-        # --- Step 1: Render the specified page as a high-res image ---
         doc = fitz.open(stream=file_stream, filetype=file_type)
         if page_num < 1 or page_num > doc.page_count:
             return jsonify({"error": "Invalid page number"}), 400
             
-        page = doc.load_page(page_num - 1) # fitz is 0-indexed
-        pix = page.get_pixmap(dpi=200) # Good balance of quality and performance
+        page = doc.load_page(page_num - 1)
+        pix = page.get_pixmap(dpi=200)
         
         img_buffer = io.BytesIO()
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -191,21 +190,25 @@ def analyze_gdt_at_point_handler():
         
         doc.close()
         
-        # --- Step 2: Create the context-aware prompt ---
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
         gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
 
+        # --- THE ULTIMATE PROMPT with SELF-CORRECTION ---
         prompt = [
-            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard.",
+            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard. You are meticulous and double-check your work.",
             "Analyze the provided engineering drawing image.",
-            f"A user has clicked on the coordinate (x={int(x_coord)}, y={int(y_coord)}). Your task is to locate the single GD&T Feature Control Frame closest to this point and parse its contents.",
+            f"A user has clicked on the coordinate (x={int(x_coord)}, y={int(y_coord)}). Your task is to locate the single GD&T Feature Control Frame closest to this point and parse its contents with extreme precision.",
             "Return the findings as a single, raw JSON object representing this one feature.",
             "The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
-            "For example, for a frame that reads 'Position | Ø0.1 M | A M | B', your JSON output should be:",
+            
+            # --- NEW SELF-CORRECTION INSTRUCTION ---
+            "CRITICAL: Double-check the numerical values. Tolerance values in this context are rarely small decimals like '0.9' when the number on the drawing is clearly '9'. Be careful to distinguish between periods and pixel noise.",
+            
+            "For example, for a frame that reads 'Position | Ø9 M | A M | B', your JSON output should be:",
             """
             {
               "gdt_symbol_name": "Position",
-              "tolerance_value": "0.1",
+              "tolerance_value": "9",
               "diameter_symbol": true,
               "material_condition_modifier": "MMC",
               "datums": [
@@ -215,7 +218,7 @@ def analyze_gdt_at_point_handler():
             }
             """,
             "If no valid GD&T frame is near the click, return an empty JSON object `{}`.",
-            "Now, analyze this image with the click focus:",
+            "Now, analyze this image with the click focus and provide the precise JSON output:",
             gdt_image,
         ]
         
