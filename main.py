@@ -47,7 +47,11 @@ def generate_with_retry(model, prompt, max_retries=3, retry_delay=5):
                 raise e
 
 # --- Flask App Initialization ---
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='')
+
+@app.route('/')
+def serve_index():
+    return send_file('index.html')
 CORS(app, 
     resources={
         r"/*": {
