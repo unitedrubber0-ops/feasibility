@@ -159,15 +159,12 @@ def process_drawing_for_gdt_handler():
     """
     Analyzes a document page as an image to extract GD&T symbols and values.
     """
-    print(f"GD&T endpoint called with method: {request.method}")
-    print(f"Request headers: {dict(request.headers)}")
+    print("\n=== GD&T Processing Started ===")
     
     # Handle preflight request
     if request.method == 'OPTIONS':
         print("Handling OPTIONS preflight request")
         response = jsonify({"status": "ok"})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         return response
 
     print("Starting GD&T processing...")
@@ -176,37 +173,75 @@ def process_drawing_for_gdt_handler():
         print(f"Files in request: {list(request.files.keys())}")
         return jsonify({"error": "Missing source file"}), 400
 
-    source_file = request.files['sourceFile']
-    print(f"Received file: {source_file.filename}")
-
     try:
-        print("Starting GD&T processing...")
-        file_stream = io.BytesIO(source_file.read())
-        file_type = source_file.filename.split('.')[-1].lower()
+        source_file = request.files['sourceFile']
+        print(f"Processing file: {source_file.filename}")
         
-        # --- Step 1: Convert the first page to a high-res image ---
+        # Check file size
+        file_content = source_file.read()
+        file_size = len(file_content)
+        print(f"File size: {file_size} bytes")
+        
+        if file_size == 0:
+            return jsonify({"error": "Empty file received"}), 400
+            
+        # Reset file pointer
+        source_file.seek(0)
+        
+        # Create a new BytesIO object
+        file_stream = io.BytesIO(file_content)
+        print("File loaded into memory successfully")
+        
+        # Get file type
+        file_type = source_file.filename.split('.')[-1].lower()
+        print(f"File type: {file_type}")
+        
+        if file_type not in ['pdf', 'docx']:
+            return jsonify({"error": "Unsupported file type. Please upload a PDF or DOCX file."}), 400
         try:
+            print("\n--- Step 1: Document Loading ---")
             print(f"Opening document of type: {file_type}")
             doc = fitz.open(stream=file_stream, filetype=file_type)
-            print("Document opened successfully")
+            print(f"Document opened successfully with {doc.page_count} pages")
             
+            if doc.page_count == 0:
+                doc.close()
+                return jsonify({"error": "Document has no pages"}), 400
+                
+            print("\n--- Step 2: Page Processing ---")
             page = doc.load_page(0)  # Process the first page
-            print("Page loaded successfully")
+            print(f"Page dimensions: {page.rect.width}x{page.rect.height}")
             
-            pix = page.get_pixmap(dpi=300)  # Use high DPI for accuracy
-            print(f"Pixmap created: {pix.width}x{pix.height}")
-            
-            # Convert PyMuPDF pixmap to PIL Image
-            img_data = pix.samples
-            if pix.alpha:  # Handle alpha channel if present
-                print("Converting RGBA image to RGB")
-                img = Image.frombytes("RGBA", [pix.width, pix.height], img_data).convert("RGB")
-            else:
-                print("Creating RGB image")
-                img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
-            
-            print("Image conversion successful")
-            doc.close()
+            print("\n--- Step 3: Image Conversion ---")
+            try:
+                pix = page.get_pixmap(dpi=300)  # Use high DPI for accuracy
+                print(f"Pixmap created: {pix.width}x{pix.height}, stride: {pix.stride}")
+                print(f"Pixmap properties: colorspace={pix.colorspace}, alpha={pix.alpha}")
+                
+                # Convert PyMuPDF pixmap to PIL Image
+                img_data = pix.samples
+                print(f"Image data size: {len(img_data)} bytes")
+                
+                if pix.alpha:
+                    print("Converting RGBA image to RGB")
+                    img = Image.frombytes("RGBA", [pix.width, pix.height], img_data).convert("RGB")
+                else:
+                    print("Creating RGB image")
+                    img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+                
+                print(f"PIL Image created: {img.size}, mode={img.mode}")
+                
+                # Verify image is valid
+                img.verify()
+                print("Image verified successfully")
+                
+            except Exception as e:
+                print(f"Error during image conversion: {str(e)}")
+                raise
+                
+            finally:
+                doc.close()
+                print("Document closed")
         except Exception as e:
             print(f"Error during image conversion: {str(e)}")
             raise
@@ -417,13 +452,63 @@ def debug_cors():
         "method": request.method
     })
 
+def log_request_info():
+    """Log detailed information about the current request."""
+    print("\n=== Request Information ===")
+    print(f"Method: {request.method}")
+    print(f"URL: {request.url}")
+    print(f"Headers: {dict(request.headers)}")
+    print(f"Files: {list(request.files.keys()) if request.files else 'No files'}")
+    print(f"Form Data: {dict(request.form)}")
+    print("=========================\n")
+
+@app.before_request
+def before_request():
+    """Log information about each request before processing."""
+    log_request_info()
+
+@app.after_request
+def after_request(response):
+    """Ensure CORS headers are present on all responses."""
+    print(f"\n=== Response Information ===")
+    print(f"Status: {response.status_code}")
+    print(f"Headers: {dict(response.headers)}")
+    print("=========================\n")
+    
+    # Always add CORS headers
+    if request.headers.get('Origin'):
+        response.headers['Access-Control-Allow-Origin'] = request.headers['Origin']
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    
+    return response
+
 @app.errorhandler(Exception)
 def handle_exception(e):
-    """Log any uncaught exceptions and ensure CORS headers are added."""
-    print(f"Uncaught exception: {type(e).__name__}: {str(e)}")
+    """Log any uncaught exceptions and ensure proper error response."""
+    print(f"\n!!! UNCAUGHT EXCEPTION !!!")
+    print(f"Type: {type(e).__name__}")
+    print(f"Message: {str(e)}")
+    
     import traceback
-    print("Traceback:")
+    print("\nTraceback:")
     print(traceback.format_exc())
+    
+    import sys
+    print("\nSystem Info:")
+    print(f"Python version: {sys.version}")
+    print(f"Platform: {sys.platform}")
+    
+    try:
+        # Try to get memory info on Linux systems
+        import resource
+        print("\nMemory Usage:")
+        print(f"Max RSS: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss} KB")
+    except ImportError:
+        print("Resource module not available")
+    
+    print("\n=========================\n")
     
     # Create the error response
     response = jsonify({
@@ -437,6 +522,8 @@ def handle_exception(e):
     if request.headers.get('Origin'):
         response.headers['Access-Control-Allow-Origin'] = request.headers['Origin']
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     
     return response
 
