@@ -794,95 +794,17 @@
             });
         }
 
-            // Function to send cropped image to backend
-            async function analyzeGdtCrop(imageBlob) {
-                const formData = new FormData();
-                formData.append('image_crop', imageBlob);
-                
-                try {
-                    const response = await fetch('http://localhost:5000/analyze-gdt-crop', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    displayGdtResults(data);
-                } catch (error) {
-                    console.error('Error analyzing GD&T crop:', error);
-                    alert('Error analyzing GD&T feature. Please try again.');
-                }
-            }
-
-            // Function to display GD&T results in the table
-            function displayGdtResults(data) {
-                const row = document.createElement('tr');
-                
-                // Format datums string
-                const datumsStr = data.datums
-                    .map(d => `${d.datum_letter}${d.datum_material_condition ? ' ' + d.datum_material_condition : ''}`)
-                    .join(' | ');
-                
-                // Create cells
-                row.innerHTML = `
-                    <td>${data.gdt_symbol_name}</td>
-                    <td>${data.diameter_symbol ? 'Ø' : ''}${data.tolerance_value}</td>
-                    <td>${datumsStr}</td>
-                    <td>${data.material_condition_modifier || '-'}</td>
-                `;
-                
-                // Add to table
-                gdtResultsBody.appendChild(row);
-            }
-
-            // Modify the viewer click handler to handle both modes
-            document.getElementById('viewer').addEventListener('click', async function(event) {
-                if (!currentPage) return;
-                
-                const canvas = event.target;
-                const rect = canvas.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
-                
-                if (isGdtMode) {
-                    // GD&T Analysis Mode
-                    const imageBlob = await cropImageAtClick(canvas, x, y);
-                    await analyzeGdtCrop(imageBlob);
-                    
-                    // Show highlight box
-                    const highlight = document.createElement('div');
-                    highlight.className = 'gdt-highlight';
-                    highlight.style.left = (x - cropSize.width / 2) + 'px';
-                    highlight.style.top = (y - cropSize.height / 2) + 'px';
-                    highlight.style.width = cropSize.width + 'px';
-                    highlight.style.height = cropSize.height + 'px';
-                    document.getElementById('viewer').appendChild(highlight);
-                    
-                    // Remove highlight after animation
-                    setTimeout(() => highlight.remove(), 2000);
-                } else {
-                    // Original ballooning mode code
-                    addBalloon(x / canvas.width, y / canvas.height);
-                }
-            });
-        </script>
-    </body>
-            } catch(e) {
-                console.error("PDF Generation Error:", e);
-                showError(`Failed to generate PDF: ${e.message}`);
-            } finally {
-                loader.classList.add('hidden');
-            }
-        }
-        
         async function downloadDocxReport() {
-            if (balloonData.length === 0) { showError("No items have been ballooned yet."); return; }
+            if (balloonData.length === 0) {
+                showError("No items have been ballooned yet.");
+                return;
+            }
 
             const reportData = {
-                header: { "Report Type": "Ballooned Inspection Report", "Source File": sourceFile.name },
+                header: {
+                    "Report Type": "Ballooned Inspection Report",
+                    "Source File": sourceFile.name
+                },
                 table: {
                     columns: ["No.", "Parameter", "Value"],
                     rows: balloonData.map(d => [d.number, d.parameter, d.value])
@@ -895,7 +817,9 @@
 
             try {
                 const response = await fetch(`${backendUrlBase}/export-docx`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reportData),
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reportData),
                 });
                 if (!response.ok) throw new Error((await response.json()).error);
                 
@@ -904,8 +828,10 @@
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = 'ballooned_report.docx';
-                document.body.appendChild(a); a.click();
-                URL.revokeObjectURL(url); a.remove();
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                a.remove();
             } catch (error) {
                 showError(`Could not download file: ${error.message}`);
             } finally {
