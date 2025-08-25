@@ -48,12 +48,21 @@ def generate_with_retry(model, prompt, max_retries=3, retry_delay=5):
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": [
-    "https://feasibility-638d.onrender.com",  # Backend URL
-    "https://feasibility-1.onrender.com",  # Frontend URL
-    "http://127.0.0.1:5001",  # Local development URL
-    "http://localhost:5001"  # Alternative local development URL
-]}})
+CORS(app, 
+    resources={
+        r"/*": {
+            "origins": [
+                "https://feasibility-638d.onrender.com",  # Backend URL
+                "https://feasibility-1.onrender.com",  # Frontend URL
+                "http://127.0.0.1:5001",  # Local development URL
+                "http://localhost:5001"  # Alternative local development URL
+            ],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "expose_headers": ["Content-Range", "X-Content-Range"],
+            "supports_credentials": True
+        }
+    })
 
 # --- Gemini API Configuration ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -382,6 +391,16 @@ def get_value_for_label_handler():
     except Exception as e:
         print(f"An error occurred during AI processing for label '{label}': {e}")
         return jsonify({"error": f"AI processing failed: {str(e)}"}), 500
+
+# Debug route to verify CORS
+@app.route('/debug-cors', methods=['GET', 'OPTIONS'])
+def debug_cors():
+    """Simple endpoint to verify CORS configuration."""
+    return jsonify({
+        "message": "CORS is working",
+        "origin": request.headers.get('Origin', 'No origin header'),
+        "method": request.method
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
