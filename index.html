@@ -429,8 +429,13 @@
         }
         
         async function renderAllPdfPages(scale) {
+            if (!viewer || !zoomLevel || !pdfDoc) {
+                throw new Error('Required elements or PDF document not initialized');
+            }
+            
             viewer.innerHTML = ''; // Clear previous render
             zoomLevel.textContent = `${Math.round(scale * 100)}%`;
+            
             for (let i = 1; i <= pdfDoc.numPages; i++) {
                 const page = await pdfDoc.getPage(i);
                 const viewport = page.getViewport({ scale });
