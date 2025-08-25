@@ -166,7 +166,9 @@ def process_drawing_for_gdt_handler():
         doc.close()
 
         # --- Step 2: Send the image to the multimodal AI model ---
-        model = genai.GenerativeModel("gemini-1.5-pro-latest")
+        safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+        generation_config = genai.GenerationConfig(max_output_tokens=8192, temperature=0.1)
+        model = genai.GenerativeModel("gemini-2.5-pro", generation_config=generation_config, safety_settings=safety_settings)
 
         # --- Step 3: Create a powerful multimodal prompt ---
         prompt = [
