@@ -347,30 +347,59 @@
 
             // State Management Functions
             function resetState() {
-                // Reset all data structures
+                console.log('Starting complete application state reset...');
+
+                // 1. Reset all global state variables
                 sourceFile = null;
                 ocrData = null;
                 pdfDoc = null;
                 balloonData = [];
                 balloonCounter = 1;
+                pdfScale = 1.5;  // Reset to default zoom level
+                isGdtMode = false;  // Reset to default mode
                 
-                // Reset UI elements
-                viewer.innerHTML = '';
-                reportTableBody.innerHTML = '';
+                // 2. Reset UI elements
+                if (viewer) viewer.innerHTML = '';
+                if (reportTableBody) reportTableBody.innerHTML = '';
+                const gdtResultsBody = document.getElementById('gdtResultsBody');
+                if (gdtResultsBody) gdtResultsBody.innerHTML = '';
+                
+                // 3. Remove all dynamic elements
                 document.querySelectorAll('.balloon').forEach(b => b.remove());
-                changePdfScale(0, true);
-                
-                // Reset visibility states
-                resultsSection.classList.add('hidden');
-                placeholderText.classList.add('hidden');
-                errorMessage.classList.add('hidden');
-                gdtResultsContainer.classList.add('hidden');
-                zoomControls.classList.add('hidden');
-                
-                // Clear any GD&T highlights
                 document.querySelectorAll('.gdt-highlight').forEach(h => h.remove());
                 
-                console.log('Application state has been reset');
+                // 4. Reset file input
+                const fileInput = document.getElementById('source-file-input');
+                if (fileInput) fileInput.value = '';
+                
+                // 5. Reset visibility states
+                const elementsToHide = [
+                    resultsSection,
+                    placeholderText,
+                    errorMessage,
+                    gdtResultsContainer,
+                    zoomControls,
+                    loader
+                ];
+                
+                elementsToHide.forEach(element => {
+                    if (element) element.classList.add('hidden');
+                });
+                
+                // 6. Reset mode toggle button
+                if (modeToggle) {
+                    modeToggle.textContent = 'Ballooning Mode';
+                    modeToggle.classList.remove('gdt-mode');
+                }
+                
+                // 7. Reset zoom level display
+                if (zoomLevel) zoomLevel.textContent = '150%';
+                
+                // 8. Clear any error messages
+                if (errorMessage) errorMessage.textContent = '';
+                if (loaderText) loaderText.textContent = '';
+                
+                console.log('Application state has been completely reset');
             }
 
             // Utility functions
@@ -382,15 +411,31 @@
             // Event handler functions
             async function handleFileSelect(event) {
                 try {
-                    // Reset all data structures and UI elements
+                    // 1. Reset everything before processing new file
                     resetState();
+                    console.log('Starting new file processing after reset...');
                     
-                    // Also clear any GD&T analysis results
-                    const gdtResultsBody = document.getElementById('gdtResultsBody');
-                    if (gdtResultsBody) gdtResultsBody.innerHTML = '';
+                    // 2. Validate file input
+                    if (!event.target.files || event.target.files.length === 0) {
+                        showError('No file selected');
+                        return;
+                    }
                     
+                    // 3. Validate file type
                     sourceFile = event.target.files[0];
-                    if (!sourceFile) return;
+                    if (!sourceFile.type.includes('pdf')) {
+                        showError('Please select a PDF file');
+                        resetState();
+                        return;
+                    }
+                    
+                    // 4. Validate file size (max 50MB)
+                    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+                    if (sourceFile.size > maxSize) {
+                        showError('File size too large. Please select a file under 50MB');
+                        resetState();
+                        return;
+                    }
 
                     loaderText.textContent = 'Processing document...';
                     loader.classList.remove('hidden');

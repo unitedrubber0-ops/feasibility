@@ -162,7 +162,7 @@ def generate_report_handler():
 def analyze_gdt_at_point_handler():
     """
     Analyzes a full drawing page, focusing on the GD&T feature
-    closest to the provided X, Y coordinates.
+    closest to the provided X, Y coordinates, using a few-shot prompt.
     """
     if 'sourceFile' not in request.files or 'x' not in request.form or 'y' not in request.form or 'page_num' not in request.form:
         return jsonify({"error": "Missing source file or coordinate data"}), 400
@@ -193,41 +193,80 @@ def analyze_gdt_at_point_handler():
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
         gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
 
-        # --- THE ULTIMATE PROMPT with SELF-CORRECTION ---
+        # --- THE ULTIMATE PROMPT with FEW-SHOT LEARNING ---
         prompt = [
-            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard. You are meticulous and double-check your work.",
-            "Analyze the provided engineering drawing image.",
-            f"A user has clicked on the coordinate (x={int(x_coord)}, y={int(y_coord)}). Your task is to locate the single GD&T Feature Control Frame closest to this point and parse its contents with extreme precision.",
-            "Return the findings as a single, raw JSON object representing this one feature.",
-            "The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
-            
-            # --- ENHANCED ACCURACY INSTRUCTIONS ---
-            "CRITICAL ACCURACY REQUIREMENTS:",
-            "1. Numbers must be EXACT - pay special attention to commonly confused pairs:",
-            "   - 6 vs 9 (check orientation and context)",
-            "   - 3 vs 8 (look for gaps in curves)",
-            "   - 1 vs 7 (check for horizontal bars)",
-            "2. Double-check numerical values - look at the entire Feature Control Frame for context",
-            "3. Material condition modifiers must be exact: 'MMC' for Maximum Material Condition (M), 'LMC' for Least Material Condition (L), or null if none specified",
-            "4. Only include datums that are explicitly shown in the frame - do not add extra datums",
-            "5. Each datum's material condition must match exactly what's shown - if a datum has no modifier, its datum_material_condition should be null",
-            "6. For position tolerances, verify if the value matches typical ranges (usually 0.2 to 2.0 for metric)",
-            
-            "For example, for a frame that reads 'Position | Ø9 M | A M | B', your JSON output should be:",
-            """
+            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard. You analyze GD&T Feature Control Frames with perfect accuracy using few-shot learning from these examples:",
+
+            "Example 1 - Position with MMC and Multiple Datums:",
+            """Given: Position | Ø0.6 M | A M | B | C
             {
               "gdt_symbol_name": "Position",
-              "tolerance_value": "9",
+              "tolerance_value": "0.6",
               "diameter_symbol": true,
               "material_condition_modifier": "MMC",
               "datums": [
                 { "datum_letter": "A", "datum_material_condition": "MMC" },
-                { "datum_letter": "B", "datum_material_condition": null }
+                { "datum_letter": "B", "datum_material_condition": null },
+                { "datum_letter": "C", "datum_material_condition": null }
               ]
-            }
-            """,
-            "If no valid GD&T frame is near the click, return an empty JSON object `{}`.",
-            "Now, analyze this image with the click focus and provide the precise JSON output:",
+            }""",
+
+            "Example 2 - Perpendicularity with Single Datum:",
+            """Given: ⊥ | 0.2 | A
+            {
+              "gdt_symbol_name": "Perpendicularity",
+              "tolerance_value": "0.2",
+              "diameter_symbol": false,
+              "material_condition_modifier": null,
+              "datums": [
+                { "datum_letter": "A", "datum_material_condition": null }
+              ]
+            }""",
+
+            "Example 3 - Flatness with No Datums:",
+            """Given: ⎬ | 0.3
+            {
+              "gdt_symbol_name": "Flatness",
+              "tolerance_value": "0.3",
+              "diameter_symbol": false,
+              "material_condition_modifier": null,
+              "datums": []
+            }""",
+
+            "Example 4 - Orientation with LMC:",
+            """Given: ∠ | 0.4 L | A L
+            {
+              "gdt_symbol_name": "Angularity",
+              "tolerance_value": "0.4",
+              "diameter_symbol": false,
+              "material_condition_modifier": "LMC",
+              "datums": [
+                { "datum_letter": "A", "datum_material_condition": "LMC" }
+              ]
+            }""",
+            
+            # --- ENHANCED ACCURACY INSTRUCTIONS ---
+            "CRITICAL ACCURACY REQUIREMENTS:",
+            "1. Numbers must be EXACT - pay special attention to common confusions:",
+            "   - 6 vs 9: Analyze orientation - 6 opens up, 9 opens down",
+            "   - 3 vs 8: Look for continuous curves (8) vs distinct gaps (3)",
+            "   - 1 vs 7: Check for baseline serif (1) vs angled stroke (7)",
+            "   - 0 vs 6/9: Look for complete roundness (0) vs attached stem",
+            "2. Double-check numerical values using feature frame context and typical ranges:",
+            "   - Position: Usually 0.2 to 2.0 for metric",
+            "   - Flatness: Typically 0.1 to 0.5",
+            "   - Surface Profile: Generally 0.1 to 1.0",
+            "3. Material condition modifiers must be exact:",
+            "   - MMC (Maximum Material Condition): When you see M",
+            "   - LMC (Least Material Condition): When you see L",
+            "   - null: When no modifier is shown",
+            "4. Check datum reference frame carefully:",
+            "   - Only include datums explicitly shown",
+            "   - Match modifiers exactly as shown (M, L, or none)",
+            "   - Preserve datum order (primary|secondary|tertiary)",
+
+            f"Now, analyze this image focusing on the GD&T frame nearest to coordinates (x={int(x_coord)}, y={int(y_coord)}). Parse it with extreme precision following the examples above. Return a single JSON object. If no valid frame is found near the click, return an empty object `{{}}`.",
+            
             gdt_image,
         ]
         
