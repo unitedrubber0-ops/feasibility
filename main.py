@@ -298,7 +298,6 @@ def analyze_gdt_crop_handler():
     except Exception as e:
         print(f"An error occurred during GD&T crop analysis: {e}")
         return jsonify({"error": f"Failed to analyze GD&T crop: {str(e)}"}), 500
-        return jsonify({"error": f"Failed to process drawing for GD&T: {str(e)}"}), 500
 
 # --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])
