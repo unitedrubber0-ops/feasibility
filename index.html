@@ -233,7 +233,7 @@
         // Initialize global variables for DOM elements
         let viewer, errorMessage, loaderText, loader, reportTableBody, resultsSection,
             placeholderText, downloadDocxBtn, zoomControls, zoomLevel, downloadPdfBtn,
-            zoomOutBtn, zoomInBtn, zoomResetBtn, modeToggle, gdtResultsContainer;
+            zoomOutBtn, zoomInBtn, zoomResetBtn, modeToggle, gdtResultsContainer, downloadGdtDocxBtn;
 
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize DOM Elements
@@ -277,7 +277,9 @@
                     }
                     document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
                     document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
-                    document.getElementById('download-gdt-docx-btn')?.addEventListener('click', downloadGdtDocxReport);
+                    if (downloadGdtDocxBtn) {
+                        downloadGdtDocxBtn.addEventListener('click', downloadGdtDocxReport);
+                    }
                     document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
                         if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
                             resetAllLabels();
