@@ -432,28 +432,27 @@
                     // 2. Store the file reference before reset
                     const selectedFile = event.target.files[0];
                     
-                    // 3. Reset everything before processing new file
+                    // 3. Validate file type before reset
+                    if (!selectedFile.type.includes('pdf')) {
+                        showError('Please select a PDF file');
+                        return;
+                    }
+                    
+                    // 4. Validate file size (max 50MB) before reset
+                    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+                    if (selectedFile.size > maxSize) {
+                        showError('File size too large. Please select a file under 50MB');
+                        return;
+                    }
+                    
+                    // 5. Reset everything before processing new file
                     resetState();
                     console.log('Starting new file processing after reset...');
                     
-                    // 4. Set the stored file
+                    // 6. Set the stored file
                     sourceFile = selectedFile;
                     
-                    // 3. Validate file type
-                    sourceFile = event.target.files[0];
-                    if (!sourceFile.type.includes('pdf')) {
-                        showError('Please select a PDF file');
-                        resetState();
-                        return;
-                    }
-                    
-                    // 4. Validate file size (max 50MB)
-                    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
-                    if (sourceFile.size > maxSize) {
-                        showError('File size too large. Please select a file under 50MB');
-                        resetState();
-                        return;
-                    }
+                    // The file validation is now handled above
 
                     loaderText.textContent = 'Processing document...';
                     loader.classList.remove('hidden');
