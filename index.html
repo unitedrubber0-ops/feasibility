@@ -18,43 +18,38 @@
     
     <!-- Initialize libraries -->
     <script>
+        function waitForLibraries(timeout = 5000) {
+            const startTime = Date.now();
+            
+            return new Promise((resolve, reject) => {
+                function checkLibraries() {
+                    if (window.pdfjsLib && window.PDFLib) {
+                        console.log('PDF libraries loaded successfully');
+                        resolve();
+                        return;
+                    }
+                    
+                    if (Date.now() - startTime > timeout) {
+                        reject(new Error('Timeout waiting for PDF libraries'));
+                        return;
+                    }
+                    
+                    setTimeout(checkLibraries, 100);
+                }
+                
+                checkLibraries();
+            });
+        }
+
         window.initializePdfLibraries = async function() {
             try {
-                // Check PDF.js
-                if (typeof pdfjsLib === 'undefined') {
-                    throw new Error('PDF.js not loaded yet');
-                }
-                
-                // Check PDF-Lib (it exposes itself as window.PDFLib)
-                if (typeof window.PDFLib === 'undefined') {
-                    throw new Error('PDF-Lib not loaded yet');
-                }
-                
-                // If we get here, both libraries are loaded
-                console.log('PDF.js and PDF-Lib loaded successfully');
-                
-                // Store references globally
-                window.pdfjsLib = pdfjsLib;
+                await waitForLibraries();
                 return true;
-                
             } catch (error) {
                 console.error('Library initialization error:', error);
                 throw error;
             }
         };
-                    await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
-                }
-            }
-        };
-
-        // Initialize when everything is loaded
-        window.addEventListener('load', async () => {
-            try {
-                await window.initializePdfLibraries();
-            } catch (error) {
-                console.error('Failed to initialize PDF libraries:', error);
-            }
-        });
     </script>
 
     <style>
@@ -257,8 +252,12 @@
             // Initialize libraries and setup
             (async function initializeApp() {
                 try {
-                    // Initialize PDF libraries
-                    await window.initializePdfLibraries();
+                    // Wait for PDF libraries to load
+                    if (window.initializePdfLibraries) {
+                        await window.initializePdfLibraries();
+                    } else {
+                        throw new Error('PDF library initialization function not available');
+                    }
                     console.log('Application initialized successfully');
 
                     // Setup event listeners for file operations
