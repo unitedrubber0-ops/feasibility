@@ -422,16 +422,22 @@
                     console.log('File selection event triggered');
                     console.log('Files:', event.target.files);
                     
-                    // 1. Reset everything before processing new file
-                    resetState();
-                    console.log('Starting new file processing after reset...');
-                    
-                    // 2. Validate file input
+                    // 1. Validate file input first
                     if (!event.target.files || event.target.files.length === 0) {
                         console.log('No files detected in event');
                         showError('No file selected');
                         return;
                     }
+
+                    // 2. Store the file reference before reset
+                    const selectedFile = event.target.files[0];
+                    
+                    // 3. Reset everything before processing new file
+                    resetState();
+                    console.log('Starting new file processing after reset...');
+                    
+                    // 4. Set the stored file
+                    sourceFile = selectedFile;
                     
                     // 3. Validate file type
                     sourceFile = event.target.files[0];
