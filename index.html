@@ -27,15 +27,15 @@
         }
         
         .balloon-table {
-            width: 38px;
-            height: 38px;
+            width: 30px;
+            height: 30px;
             border: 2px solid #4f46e5;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             background-color: transparent;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             color: #4f46e5;
             margin: 0 auto;
@@ -108,20 +108,20 @@
         }
         .balloon {
             position: absolute;
-            width: 40px;
-            height: 40px;
+            width: 32px;
+            height: 32px;
             background-color: white; /* white interior like the screenshot */
             color: rgb(220, 18, 18); /* vivid red for the number */
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            font-size: 22px; font-weight: 700; /* slightly smaller bold number */
+            font-size: 18px; font-weight: 700; /* reduced bold number */
             cursor: move; user-select: none;
             transform: translate(-50%, -50%);
             z-index: 9999;
-            /* Slight inner highlight and thinner red border to match smaller size */
-            box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 3px rgb(255, 255, 255) inset;
-            border: 3px solid rgb(220, 18, 18);
-            outline: 1px solid rgba(0,0,0,0.02);
+            /* Slight inner highlight and compact red border for smaller size */
+            box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 0 0 2px rgb(255, 255, 255) inset;
+            border: 2px solid rgb(220, 18, 18);
+            outline: 1px solid rgba(0,0,0,0.01);
         }
         /* Style for the new remove button */
         .remove-balloon-btn {
@@ -636,12 +636,12 @@
                 // Accessibility
                 balloon.setAttribute('role', 'img');
                 balloon.setAttribute('aria-label', `Balloon ${data.number}`);
-                // Ensure consistent size & visible number color (reduced)
-                balloon.style.width = '40px';
-                balloon.style.height = '40px';
-                balloon.style.fontSize = '22px';
+                // Ensure consistent size & visible number color (compact)
+                balloon.style.width = '32px';
+                balloon.style.height = '32px';
+                balloon.style.fontSize = '18px';
                 balloon.style.color = 'rgb(220, 18, 18)';
-                balloon.style.lineHeight = '40px';
+                balloon.style.lineHeight = '32px';
                 // Store number in dataset for removal logic
                 balloon.dataset.balloonNumber = data.number;
                 
@@ -943,12 +943,12 @@
                     const y = height - (data.y * height);
 
                     // Draw white filled circle with thick red stroke to match on-screen balloon
-                    const circleRadius = 20; // smaller points to match reduced 40px on screen
-                    page.drawCircle({ x, y, size: circleRadius, color: rgb(1, 1, 1), borderColor: rgb(0.86, 0.07, 0.07), borderWidth: 2.5 });
+                    const circleRadius = 14; // smaller points to match reduced 32px on screen
+                    page.drawCircle({ x, y, size: circleRadius, color: rgb(1, 1, 1), borderColor: rgb(0.86, 0.07, 0.07), borderWidth: 2 });
 
                     // Draw the large red number centered inside the circle
                     const text = String(data.number);
-                    const fontSize = 16;
+                    const fontSize = 12;
                     const textWidth = font.widthOfTextAtSize(text, fontSize);
                     const textHeight = fontSize;
                     page.drawText(text, { x: x - textWidth / 2, y: y - textHeight / 2 + 2, size: fontSize, font, color: rgb(0.86, 0.07, 0.07) });
