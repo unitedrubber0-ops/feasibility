@@ -268,7 +268,14 @@
                     console.log('Application initialized successfully');
 
                     // Setup event listeners for file operations
-                    document.getElementById('source-file-input')?.addEventListener('change', handleFileSelect);
+                    const fileInput = document.getElementById('source-file-input');
+                    console.log('File input element:', fileInput);
+                    if (fileInput) {
+                        fileInput.addEventListener('change', handleFileSelect);
+                        console.log('File input change listener attached');
+                    } else {
+                        console.error('File input element not found');
+                    }
                     document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
                     document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
                     document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
@@ -411,12 +418,17 @@
             // Event handler functions
             async function handleFileSelect(event) {
                 try {
+                    // Debug file selection
+                    console.log('File selection event triggered');
+                    console.log('Files:', event.target.files);
+                    
                     // 1. Reset everything before processing new file
                     resetState();
                     console.log('Starting new file processing after reset...');
                     
                     // 2. Validate file input
                     if (!event.target.files || event.target.files.length === 0) {
+                        console.log('No files detected in event');
                         showError('No file selected');
                         return;
                     }
