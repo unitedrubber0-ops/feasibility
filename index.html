@@ -136,6 +136,9 @@
                 <!-- GD&T Results Table -->
                 <div id="gdtResultsContainer" class="hidden mb-4">
                     <h3 class="text-lg font-semibold mb-2">GD&T Analysis Results</h3>
+                    <button id="download-gdt-docx-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">
+                        Download GD&T .docx
+                    </button>
                     <table class="gdt-results-table">
                         <thead>
                             <tr>
@@ -248,6 +251,7 @@
             zoomResetBtn = document.getElementById('zoom-reset-btn');
             modeToggle = document.getElementById('modeToggle');
             gdtResultsContainer = document.getElementById('gdtResultsContainer');
+            const downloadGdtDocxBtn = document.getElementById('download-gdt-docx-btn');
 
             // Initialize libraries and setup
             (async function initializeApp() {
@@ -269,6 +273,7 @@
                     } else {
                         console.error('File input element not found');
                     }
+                    downloadGdtDocxBtn.addEventListener('click', downloadGdtDocxReport);
                     document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
                     document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
                     document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
@@ -882,9 +887,17 @@
             formData.append('x', pdfX);
             formData.append('y', pdfY);
             
+            console.log('Analyzing GD&T at:', {
+                page: pageNum,
+                x: pdfX,
+                y: pdfY
+            });
+            
             try {
                 const response = await fetch(`${backendUrlBase}/analyze-gdt-at-point`, { method: 'POST', body: formData });
                 if (!response.ok) throw new Error((await response.json()).error);
+                
+                console.log('GD&T analysis response:', await response.clone().json());
                 
                 const data = await response.json();
                 
@@ -981,6 +994,59 @@
                 loader.classList.add('hidden');
                 downloadDocxBtn.disabled = false;
             }
+        async function downloadGdtDocxReport() {
+    // 1. Scrape data from the visible GD&T results table
+    const rows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(tr => {
+        const cells = tr.querySelectorAll('td');
+        return Array.from(cells, cell => cell.textContent.trim());
+    });
+
+    if (rows.length === 0) {
+        showError("No GD&T items have been analyzed yet.");
+        return;
+    }
+
+    // 2. Format the data into the JSON structure the backend expects
+    const reportData = {
+        header: { 
+            "Report Type": "GD&T Analysis Report",
+            "Source File": sourceFile.name 
+        },
+        table: {
+            columns: ["Characteristic", "Value", "Datums", "Modifiers"],
+            rows: rows
+        }
+    };
+    
+    // 3. Show loader and call the existing /export-docx endpoint
+    loaderText.textContent = 'Generating GD&T DOCX file...';
+    loader.classList.remove('hidden');
+    downloadGdtDocxBtn.disabled = true;
+
+    try {
+        const response = await fetch(`${backendUrlBase}/export-docx`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reportData),
+        });
+        if (!response.ok) throw new Error((await response.json()).error);
+        
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gdt_analysis_report.docx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+    } catch (error) {
+        showError(`Could not download GD&T report: ${error.message}`);
+    } finally {
+        loader.classList.add('hidden');
+        downloadGdtDocxBtn.disabled = false;
+    }
+}
         }
     </script>
 </body>
