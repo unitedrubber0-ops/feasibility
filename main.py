@@ -160,11 +160,13 @@ def generate_report_handler():
 
 # In main.py, replace the /analyze-gdt-at-point endpoint
 
+# In main.py, replace the /analyze-gdt-at-point endpoint
+
 @app.route('/analyze-gdt-at-point', methods=['POST'])
 def analyze_gdt_at_point_handler():
     """
-    Analyzes a full drawing page, focusing on the GD&T feature
-    closest to the provided X, Y coordinates, using a self-correction prompt.
+    Analyzes a cropped section of a drawing page centered on the
+    user's click to provide a highly focused and accurate GD&T analysis.
     """
     if 'sourceFile' not in request.files or 'x' not in request.form or 'y' not in request.form or 'page_num' not in request.form:
         return jsonify({"error": "Missing source file or coordinate data"}), 400
@@ -183,7 +185,22 @@ def analyze_gdt_at_point_handler():
             return jsonify({"error": "Invalid page number"}), 400
             
         page = doc.load_page(page_num - 1)
-        pix = page.get_pixmap(dpi=200) # 200 DPI is a good balance of quality and performance
+        
+        # --- THIS IS THE KEY: BACKEND CROPPING ---
+        # Define the crop box size
+        CROP_WIDTH = 300
+        CROP_HEIGHT = 100
+        
+        # Create a clipping rectangle centered on the user's click
+        clip_box = fitz.Rect(
+            x_coord - CROP_WIDTH / 2,
+            y_coord - CROP_HEIGHT / 2,
+            x_coord + CROP_WIDTH / 2,
+            y_coord + CROP_HEIGHT / 2
+        )
+        
+        # Render only the cropped area at high resolution
+        pix = page.get_pixmap(dpi=200, clip=clip_box)
         
         img_buffer = io.BytesIO()
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -192,36 +209,16 @@ def analyze_gdt_at_point_handler():
         
         doc.close()
         
+        # --- Use the same expert-level, self-correcting prompt ---
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
         gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
 
-        # --- THE ULTIMATE PROMPT with SELF-CORRECTION ---
         prompt = [
-            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard. Your primary directive is precision and adherence to the visual information provided.",
-            "Analyze the provided engineering drawing image.",
-            f"A user has clicked on the coordinate (x={int(x_coord)}, y={int(y_coord)}). Your task is to locate the single GD&T Feature Control Frame closest to this point and parse ONLY the information contained WITHIN that frame.",
-            
-            # --- New Self-Correction and Constraint Instructions ---
-            "CRITICAL INSTRUCTIONS:",
-            "1. **Do Not Hallucinate:** Only report the datum letters and modifiers that are explicitly written inside the feature control frame's compartments. Do not infer datums from nearby symbols (like a Datum Feature Symbol).",
-            "2. **Verify Numbers:** Double-check your interpretation of numerical values against the image. A '6' should not be read as a '9' or '0.9'.",
-            "3. **Stick to the Schema:** Return a single, raw JSON object representing this one feature. The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
-
-            # Provide a clear example
-            "For example, for a frame that reads 'Position | Ø6 M | A M', your JSON output must be:",
-            """
-            {
-              "gdt_symbol_name": "Position",
-              "tolerance_value": "6",
-              "diameter_symbol": true,
-              "material_condition_modifier": "MMC",
-              "datums": [
-                { "datum_letter": "A", "datum_material_condition": "MMC" }
-              ]
-            }
-            """,
-            "If no valid GD&T frame is near the click, return an empty JSON object `{}`.",
-            "Now, analyze this image with the click focus and provide the precise JSON output:",
+            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard.",
+            "Analyze the following cropped image of a single feature control frame with extreme precision.",
+            "Return the findings as a single, raw JSON object representing this one feature.",
+            "The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier', and a list of 'datums'.",
+            "CRITICAL: Be meticulous. Do not hallucinate or guess. Only report the symbols, values, and letters explicitly visible in the image.",
             gdt_image,
         ]
         
@@ -232,9 +229,9 @@ def analyze_gdt_at_point_handler():
         return jsonify(response_json)
 
     except Exception as e:
-        print(f"An error occurred during context-aware GD&T analysis: {e}")
+        print(f"An error occurred during focused GD&T analysis: {e}")
         return jsonify({"error": f"Failed to analyze GD&T feature: {str(e)}"}), 500
-    
+       
 # --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])
 def export_docx_handler():
