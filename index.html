@@ -10,8 +10,8 @@
     <!-- Load PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
-    <!-- Load PDF-Lib locally -->
-    <script src="js/pdf-lib.min.js"></script>
+    <!-- Load PDF-Lib from CDN -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     
     <!-- Load GD&T mode functionality -->
     <script src="js/gdt-mode.js"></script>
@@ -19,35 +19,29 @@
     <!-- Initialize libraries -->
     <script>
         window.initializePdfLibraries = async function() {
-            const maxAttempts = 10;
-            const delayBetweenAttempts = 200;
-            
-            for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                try {
-                    // Check PDF.js
-                    if (typeof pdfjsLib === 'undefined') {
-                        throw new Error('PDF.js not loaded yet');
-                    }
-                    
-                    // Check PDF-Lib (it exposes itself as window.PDFLib)
-                    if (typeof window.PDFLib === 'undefined') {
-                        throw new Error('PDF-Lib not loaded yet');
-                    }
-                    
-                    // If we get here, both libraries are loaded
-                    console.log('PDF.js and PDF-Lib loaded successfully');
-                    
-                    // Store references globally
-                    window.pdfjsLib = pdfjsLib;
-                    return true;
-                    
-                } catch (error) {
-                    if (attempt === maxAttempts - 1) {
-                        // This is our last attempt, so we should throw the error
-                        console.error('Library initialization error:', error);
-                        throw new Error('PDF-Lib failed to load after multiple attempts');
-                    }
-                    // Wait before next attempt
+            try {
+                // Check PDF.js
+                if (typeof pdfjsLib === 'undefined') {
+                    throw new Error('PDF.js not loaded yet');
+                }
+                
+                // Check PDF-Lib (it exposes itself as window.PDFLib)
+                if (typeof window.PDFLib === 'undefined') {
+                    throw new Error('PDF-Lib not loaded yet');
+                }
+                
+                // If we get here, both libraries are loaded
+                console.log('PDF.js and PDF-Lib loaded successfully');
+                
+                // Store references globally
+                window.pdfjsLib = pdfjsLib;
+                return true;
+                
+            } catch (error) {
+                console.error('Library initialization error:', error);
+                throw error;
+            }
+        };
                     await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
                 }
             }
