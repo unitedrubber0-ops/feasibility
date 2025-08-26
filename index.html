@@ -6,6 +6,50 @@
     <title>Interactive Inspection Report Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .balloon {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border: 2px solid #4f46e5;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.7);
+            font-size: 18px;
+            font-weight: bold;
+            color: #4f46e5;
+            cursor: move;
+            user-select: none;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+        
+        .balloon-table {
+            width: 32px;
+            height: 32px;
+            border: 2px solid #4f46e5;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: transparent;
+            font-size: 18px;
+            font-weight: bold;
+            color: #4f46e5;
+            margin: 0 auto;
+        }
+
+        #viewer {
+            position: relative;
+        }
+
+        #viewer canvas {
+            display: block;
+            margin-bottom: 1rem;
+        }
+    </style>
     
     <!-- Load PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -586,9 +630,55 @@
                 
                 balloon.style.left = `${data.x * canvas.width}px`;
                 balloon.style.top = `${data.y * canvas.height}px`;
+                balloon.style.cursor = 'move'; // Add cursor style for dragging
+                
+                // Make balloon draggable
+                balloon.addEventListener('mousedown', initDrag);
+                
                 viewer.appendChild(balloon);
             });
         }
+
+        // Drag functionality for balloons
+        function initDrag(e) {
+            const balloon = e.target;
+            const canvas = viewer.querySelector('canvas');
+            if (!canvas) return;
+
+            // Get initial mouse position and balloon position
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startLeft = balloon.offsetLeft;
+            const startTop = balloon.offsetTop;
+
+            // Create move and stop functions
+            function dragMove(e) {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                
+                balloon.style.left = `${startLeft + dx}px`;
+                balloon.style.top = `${startTop + dy}px`;
+                
+                // Update balloon data
+                const balloonNumber = parseInt(balloon.dataset.balloonNumber);
+                const balloonItem = balloonData.find(b => b.number === balloonNumber);
+                if (balloonItem) {
+                    balloonItem.x = (startLeft + dx) / canvas.width;
+                    balloonItem.y = (startTop + dy) / canvas.height;
+                }
+            }
+
+            function dragStop() {
+                document.removeEventListener('mousemove', dragMove);
+                document.removeEventListener('mouseup', dragStop);
+            }
+
+            // Add move and stop listeners
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('mouseup', dragStop);
+            e.preventDefault(); // Prevent text selection while dragging
+        }
+
         // ... (handleViewerClick and findWordAtClick are the same) ...
         function handleViewerClick(event) {
             if (!ocrData || !pdfDoc) return;
@@ -696,7 +786,7 @@
                 // --- FEATURE 3: Add data-attribute to row and include remove button ---
                 tr.dataset.balloonNumber = number;
                 tr.innerHTML = `
-                    <td class="px-4 py-3"><div class="balloon" style="position:relative; transform:none; background-color:#4f46e5; color:white;">${number}</div></td>
+                    <td class="px-4 py-3"><div class="balloon-table">${number}</div></td>
                     <td class="px-4 py-3 font-medium">${data.parameter}</td>
                     <td class="px-4 py-3">${data.value}</td>
                     <td class="px-4 py-3 text-center">
