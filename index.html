@@ -140,23 +140,16 @@
             position: fixed;
             top: 1rem;
             right: 1rem;
-            padding: 0.75rem 1.5rem;
+            padding: 0.5rem 1rem;
             background-color: #2563eb;
             color: white;
             border-radius: 0.5rem;
             font-weight: bold;
             cursor: pointer;
             z-index: 1000;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .mode-toggle.gdt-mode {
             background-color: #059669;
-            box-shadow: 0 2px 4px rgba(5,150,105,0.2);
-        }
-        .mode-toggle:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
         }
         .gdt-results-table {
             width: 100%;
@@ -221,13 +214,13 @@
                 <h2 class="text-2xl font-bold mb-4">Inspection Data</h2>
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <div id="results-section" class="hidden">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-xl font-semibold">Results</h3>
-                            <div>
-                                <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
-                                <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download Report (.docx)</button>
-                            </div>
-                        </div>
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h3 class="text-xl font-semibold">Results</h3>
+                                        <div>
+                                            <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
+                                            <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download .docx (Combined)</button>
+                                        </div>
+                                    </div>
                         <div class="overflow-x-auto">
                             <!-- Ballooned Items Table -->
                             <table id="report-table" class="min-w-full divide-y divide-gray-200 mb-6">
@@ -282,7 +275,7 @@
         // Initialize global variables for DOM elements
         let viewer, errorMessage, loaderText, loader, reportTableBody, resultsSection,
             placeholderText, downloadDocxBtn, zoomControls, zoomLevel, downloadPdfBtn,
-            zoomOutBtn, zoomInBtn, zoomResetBtn, modeToggle, gdtResultsContainer, downloadGdtDocxBtn;
+            zoomOutBtn, zoomInBtn, zoomResetBtn, modeToggle, gdtResultsContainer;
 
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize DOM Elements
@@ -302,6 +295,7 @@
             zoomResetBtn = document.getElementById('zoom-reset-btn');
             modeToggle = document.getElementById('modeToggle');
             gdtResultsContainer = document.getElementById('gdtResultsContainer');
+
             // Initialize libraries and setup
             (async function initializeApp() {
                 try {
@@ -324,6 +318,7 @@
                     }
                     document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
                     document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
+                    // Combined DOCX download uses the primary download button
                     document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
                         if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
                             resetAllLabels();
@@ -334,27 +329,12 @@
                     if (modeToggle) {
                         modeToggle.addEventListener('click', () => {
                             isGdtMode = !isGdtMode;
-                            modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
-                            modeToggle.classList.toggle('gdt-mode');
-                            
-                            // Clear any existing highlights
-                            document.querySelectorAll('.gdt-highlight').forEach(h => h.remove());
-                            
-                            // Show/hide appropriate UI elements
                             if (isGdtMode) {
-                                // Clear existing balloon data when switching to GD&T mode
-                                balloonData = [];
-                                document.querySelectorAll('.balloon').forEach(b => b.remove());
-                                if (reportTableBody) reportTableBody.innerHTML = '';
+                                modeToggle.textContent = 'GD&T Mode';
+                                modeToggle.classList.add('gdt-mode');
                             } else {
-                                // Clear GD&T results when switching back to ballooning mode
-                                const gdtResultsBody = document.getElementById('gdtResultsBody');
-                                if (gdtResultsBody) gdtResultsBody.innerHTML = '';
-                            }
-                            
-                            // Update cursor style on viewer
-                            if (viewer) {
-                                viewer.style.cursor = isGdtMode ? 'crosshair' : 'default';
+                                modeToggle.textContent = 'Ballooning Mode';
+                                modeToggle.classList.remove('gdt-mode');
                             }
                         });
                     }
@@ -856,92 +836,10 @@
             }
         }
 
-        // Combined report generation function
-        async function downloadDocxReport() {
-            // Get balloon data if available
-            const hasBalloonData = balloonData.length > 0;
-            
-            // Get GD&T data if available
-            const gdtResultsBody = document.getElementById('gdtResultsBody');
-            const hasGdtResults = gdtResultsBody && gdtResultsBody.children.length > 0;
-            
-            if (!hasBalloonData && !hasGdtResults) {
-                showError("No data available. Add balloons or analyze GD&T features first.");
-                return;
-            }
-
-            // Prepare the combined report data
-            const reportData = {
-                header: {
-                    "Report Type": "Combined Inspection Report",
-                    "Source File": sourceFile?.name || "Untitled",
-                    "Generated Date": new Date().toLocaleString()
-                },
-                sections: []
-            };
-
-            // Add balloon data if available
-            if (hasBalloonData) {
-                reportData.sections.push({
-                    title: "Ballooned Items",
-                    table: {
-                        columns: ["No.", "Parameter", "Value"],
-                        rows: balloonData.map(d => [d.number, d.parameter, d.value])
-                    }
-                });
-            }
-
-            // Add GD&T data if available
-            if (hasGdtResults) {
-                const gdtRows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(tr => {
-                    const cells = tr.querySelectorAll('td');
-                    return Array.from(cells, cell => cell.textContent.trim());
-                });
-
-                reportData.sections.push({
-                    title: "GD&T Analysis Results",
-                    table: {
-                        columns: ["Characteristic", "Value", "Datums", "Modifiers"],
-                        rows: gdtRows
-                    }
-                });
-            }
-            
-            loaderText.textContent = 'Generating combined report...';
-            loader.classList.remove('hidden');
-            downloadDocxBtn.disabled = true;
-
-            try {
-                const response = await fetch(`${backendUrlBase}/export-docx`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(reportData)
-                });
-                
-                if (!response.ok) throw new Error((await response.json()).error);
-                
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'inspection_report.docx';
-                document.body.appendChild(a);
-                a.click();
-                URL.revokeObjectURL(url);
-                a.remove();
-            } catch (error) {
-                showError(`Could not generate report: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
-                downloadDocxBtn.disabled = false;
-            }
-        }
-
         // --- GD&T Analysis Function ---
         const gdtExtractBtn = document.getElementById('gdt-extract-btn');
-        gdtExtractBtn.addEventListener('click', async () => {
+        if (gdtExtractBtn) {
+            gdtExtractBtn.addEventListener('click', async () => {
             if (!sourceFile) {
                 showError("Please upload a source file first.");
                 return;
@@ -977,7 +875,8 @@
             } finally {
                 loader.classList.add('hidden');
             }
-        });
+            });
+        }
 
         function displayGdtResults(data) {
             reportTableBody.innerHTML = ''; // Clear previous results
@@ -1145,39 +1044,37 @@
         // Mode toggle is now handled in initializeApp()
 
         async function downloadDocxReport() {
-            // Check if we have data to export based on the current mode
+            // Gather GD&T table rows if present
             const gdtResultsBody = document.getElementById('gdtResultsBody');
-            const hasGdtResults = gdtResultsBody && gdtResultsBody.children.length > 0;
-            
-            if (!isGdtMode && balloonData.length === 0) {
-                showError("No items have been ballooned yet.");
-                return;
-            }
-            if (isGdtMode && !hasGdtResults) {
-                showError("No GD&T analysis results to export.");
+            const gdtRows = gdtResultsBody ? Array.from(gdtResultsBody.children).map(row => {
+                const cells = row.querySelectorAll('td');
+                return Array.from(cells, cell => cell.textContent.trim());
+            }) : [];
+
+            // Gather balloon rows from balloonData
+            const balloonRows = balloonData.map(d => [d.number, d.parameter, d.value]);
+
+            if (balloonRows.length === 0 && gdtRows.length === 0) {
+                showError('No balloon or GD&T results to export.');
                 return;
             }
 
             const reportData = {
                 header: {
-                    "Report Type": isGdtMode ? "GD&T Analysis Report" : "Ballooned Inspection Report",
-                    "Source File": sourceFile.name,
-                    "Analysis Mode": isGdtMode ? "GD&T Analysis" : "Ballooning"
+                    "Report Type": "Combined Inspection Report",
+                    "Source File": sourceFile ? sourceFile.name : '',
+                    "Generated At": new Date().toISOString()
                 },
-                table: isGdtMode ? {
-                    columns: ["Characteristic", "Value", "Datums", "Modifiers"],
-                    rows: Array.from(gdtResultsBody.children).map(row => [
-                        row.cells[0].textContent,
-                        row.cells[1].textContent,
-                        row.cells[2].textContent,
-                        row.cells[3].textContent
-                    ])
-                } : {
+                balloon_table: {
                     columns: ["No.", "Parameter", "Value"],
-                    rows: balloonData.map(d => [d.number, d.parameter, d.value])
+                    rows: balloonRows
+                },
+                gdt_table: {
+                    columns: ["Characteristic", "Value", "Datums", "Modifiers"],
+                    rows: gdtRows
                 }
             };
-            
+
             loaderText.textContent = 'Generating DOCX file...';
             loader.classList.remove('hidden');
             downloadDocxBtn.disabled = true;
@@ -1189,12 +1086,12 @@
                     body: JSON.stringify(reportData),
                 });
                 if (!response.ok) throw new Error((await response.json()).error);
-                
+
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'ballooned_report.docx';
+                a.download = 'combined_report.docx';
                 document.body.appendChild(a);
                 a.click();
                 URL.revokeObjectURL(url);
@@ -1204,60 +1101,6 @@
             } finally {
                 loader.classList.add('hidden');
                 downloadDocxBtn.disabled = false;
-            }
-        }
-
-        async function downloadGdtDocxReport() {
-            // 1. Scrape data from the visible GD&T results table
-            const rows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(tr => {
-                const cells = tr.querySelectorAll('td');
-                return Array.from(cells, cell => cell.textContent.trim());
-            });
-
-            if (rows.length === 0) {
-                showError("No GD&T items have been analyzed yet.");
-                return;
-            }
-
-            // 2. Format the data into the JSON structure the backend expects
-            const reportData = {
-                header: { 
-                    "Report Type": "GD&T Analysis Report",
-                    "Source File": sourceFile.name 
-                },
-                table: {
-                    columns: ["Characteristic", "Value", "Datums", "Modifiers"],
-                    rows: rows
-                }
-            };
-            
-            // 3. Show loader and call the existing /export-docx endpoint
-            loaderText.textContent = 'Generating GD&T DOCX file...';
-            loader.classList.remove('hidden');
-            downloadGdtDocxBtn.disabled = true;
-
-            try {
-                const response = await fetch(`${backendUrlBase}/export-docx`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(reportData),
-                });
-                if (!response.ok) throw new Error((await response.json()).error);
-                
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'gdt_analysis_report.docx';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(a.href);
-            } catch (error) {
-                showError(`Could not download GD&T report: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
-                downloadGdtDocxBtn.disabled = false;
             }
         }
     </script>
