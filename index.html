@@ -730,12 +730,10 @@
                 if (!parameter) return;
                 value = clickedWord;
             } else {
-                // If not numeric, use clicked word as parameter name (original behavior)
-                const customLabel = clickedWord;
-                if (!customLabel) return;
-                // Keep the original parameter name as the clicked word
-                parameter = customLabel;
-                value = '';  // No value needed for non-numeric text
+                // If not numeric, use clicked word as parameter name and prompt for value
+                parameter = clickedWord;
+                value = prompt("Enter a value for " + clickedWord + ":");
+                if (!value) return;
             }
 
             const balloonNumber = balloonCounter++;
