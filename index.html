@@ -345,9 +345,13 @@
                     if (zoomInBtn) zoomInBtn.addEventListener('click', () => changePdfScale(0.25));
                     if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => changePdfScale(0, true));
 
-                    // Setup remove balloon buttons click handler
+                    // Setup click handlers for both tables
                     if (reportTableBody) {
                         reportTableBody.addEventListener('click', handleTableClick);
+                    }
+                    const gdtResultsBody = document.getElementById('gdtResultsBody');
+                    if (gdtResultsBody) {
+                        gdtResultsBody.addEventListener('click', handleTableClick);
                     }
 
                     // Setup viewer click handler
