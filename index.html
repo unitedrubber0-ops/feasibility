@@ -354,18 +354,8 @@
                         gdtResultsBody.addEventListener('click', handleTableClick);
                     }
 
-                    // Setup viewer click handler and zoom functionality
+                    // Setup viewer click handler
                     if (viewer) {
-                        // Add wheel event listener for Ctrl + scroll zoom
-                        viewer.addEventListener('wheel', (event) => {
-                            // Only handle zoom if Ctrl key is pressed
-                            if (event.ctrlKey) {
-                                event.preventDefault(); // Prevent default scroll
-                                const zoomChange = event.deltaY > 0 ? -0.25 : 0.25;
-                                changePdfScale(zoomChange);
-                            }
-                        });
-
                         viewer.addEventListener('click', async (event) => {
                             try {
                                 const canvas = event.target;
@@ -720,30 +710,18 @@
                 return;
             }
 
-            let parameter, value;
+            let label, value;
+            const isNumeric = /^-?\d*\.?\d+$/.test(clickedWord.trim());
 
-            // Handle the case where clickedWord is an object (non-numeric text was clicked)
-            if (typeof clickedWord === 'object' && clickedWord !== null) {
-                parameter = clickedWord.text;
-                if (clickedWord.numericValue) {
-                    value = clickedWord.numericValue;
-                } else {
-                    // If no nearby numeric value was found, prompt for value
-                    value = prompt("Enter a value for " + clickedWord.text + ":");
-                    if (!value) return;
-                }
+            if (isNumeric) {
+                // For numeric text, prompt for parameter name and use clicked text as value
+                label = prompt("Enter a parameter name for this measurement:", "");
+                if (!label) return;
+                value = clickedWord;
             } else {
-                // Handle the case where clickedWord is a string (numeric text was clicked)
-                const isNumeric = /^-?\d*\.?\d+$/.test(clickedWord.trim());
-                if (isNumeric) {
-                    parameter = prompt("This appears to be a measurement. What parameter does this measure?");
-                    if (!parameter) return;
-                    value = clickedWord;
-                } else {
-                    parameter = clickedWord;
-                    value = prompt("Enter a value for " + clickedWord + ":");
-                    if (!value) return;
-                }
+                // For non-numeric text, use existing behavior
+                label = clickedWord;
+                value = null;
             }
 
             const balloonNumber = balloonCounter++;
@@ -756,14 +734,13 @@
 
             console.log('Creating balloon:', {
                 balloonNumber,
-                parameter,
-                value,
+                label: customLabel,
                 position: { relativeX, relativeY },
                 page: parseInt(canvas.dataset.pageNum, 10)
             });
 
             // Add balloon data to table with position info
-            addBalloonDataToTable(parameter, value, balloonNumber, { 
+            addBalloonDataToTable(customLabel, balloonNumber, { 
                 page: parseInt(canvas.dataset.pageNum, 10), 
                 x: relativeX, 
                 y: relativeY 
@@ -798,79 +775,43 @@
 
             // Add tolerance for click detection (10 pixels)
             const tolerance = 10 * (pageOcrData.width / targetCanvas.width);
-            // Add larger tolerance for searching nearby numbers (50 pixels)
-            const nearbyTolerance = 50 * (pageOcrData.width / targetCanvas.width);
 
-            let clickedWord = null;
-            let clickedWordBBox = null;
-
-            // First, find the clicked word
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
+                // Add tolerance to the bounding box check
                 if (clickX >= (x0 - tolerance) && 
                     clickX <= (x1 + tolerance) && 
                     clickY >= (y0 - tolerance) && 
                     clickY <= (y1 + tolerance)) {
-                    clickedWord = word;
-                    clickedWordBBox = word.bbox;
-                    break;
+                    console.log('Found word:', word.text, 'at bbox:', word.bbox);
+                    return word.text;
                 }
             }
-
-            if (!clickedWord) {
-                return null;
-            }
-
-            // If the clicked word is numeric, return it as is
-            if (/^-?\d*\.?\d+$/.test(clickedWord.text.trim())) {
-                return clickedWord.text;
-            }
-
-            // If non-numeric, search for nearby numeric values
-            const [wordX0, wordY0, wordX1, wordY1] = clickedWordBBox;
-            let nearestNumber = null;
-            let minDistance = Number.MAX_VALUE;
-
-            for (const word of pageOcrData.words) {
-                if (/^-?\d*\.?\d+$/.test(word.text.trim())) {
-                    const [x0, y0, x1, y1] = word.bbox;
-                    // Calculate center points
-                    const wordCenterX = (wordX0 + wordX1) / 2;
-                    const wordCenterY = (wordY0 + wordY1) / 2;
-                    const numCenterX = (x0 + x1) / 2;
-                    const numCenterY = (y0 + y1) / 2;
-                    
-                    // Calculate distance between centers
-                    const distance = Math.sqrt(
-                        Math.pow(wordCenterX - numCenterX, 2) + 
-                        Math.pow(wordCenterY - numCenterY, 2)
-                    );
-
-                    // Check if the number is within tolerance and closer than previous finds
-                    if (distance < nearbyTolerance && distance < minDistance) {
-                        minDistance = distance;
-                        nearestNumber = word.text;
-                    }
-                }
-            }
-
-            // Return an object with both the clicked word and its associated numeric value
-            return {
-                text: clickedWord.text,
-                numericValue: nearestNumber
-            };
+            return null;
         }
 
-        async function addBalloonDataToTable(parameter, value, number, position) {
-            loaderText.textContent = 'Adding balloon...';
+        async function addBalloonDataToTable(label, number, position) {
+            loaderText.textContent = `Finding value for "${label}"...`;
             loader.classList.remove('hidden');
 
+            const formData = new FormData();
+            formData.append('sourceFile', sourceFile);
+            formData.append('label', label);
+
             try {
-                // Create data object directly since we have both parameter and value
-                const data = {
-                    parameter: parameter,
-                    value: value
-                };
+                let data;
+                if (value) {
+                    // For numeric texts, use the clicked value directly
+                    data = {
+                        parameter: label,
+                        value: value
+                    };
+                } else {
+                    // For non-numeric texts, fetch the value from the server
+                    const response = await fetch(`${backendUrlBase}/get-value-for-label`, { method: 'POST', body: formData });
+                    if (!response.ok) throw new Error((await response.json()).error);
+                    data = await response.json();
+                }
                 
                 balloonData.push({ ...data, ...position, number });
                 
@@ -890,7 +831,7 @@
                 repositionBalloons();
 
             } catch (error) {
-                showError(`Could not add balloon: ${error.message}`);
+                showError(`Could not get data for "${label}": ${error.message}`);
                 balloonCounter--; 
             } finally {
                 loader.classList.add('hidden');
