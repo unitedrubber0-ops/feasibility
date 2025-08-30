@@ -140,16 +140,23 @@
             position: fixed;
             top: 1rem;
             right: 1rem;
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1.5rem;
             background-color: #2563eb;
             color: white;
             border-radius: 0.5rem;
             font-weight: bold;
             cursor: pointer;
             z-index: 1000;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .mode-toggle.gdt-mode {
             background-color: #059669;
+            box-shadow: 0 2px 4px rgba(5,150,105,0.2);
+        }
+        .mode-toggle:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
         }
         .gdt-results-table {
             width: 100%;
@@ -218,8 +225,7 @@
                             <h3 class="text-xl font-semibold">Results</h3>
                             <div>
                                 <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
-                                <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download .docx</button>
-                                <button id="download-gdt-docx-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Download GD&T .docx</button>
+                                <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download Report (.docx)</button>
                             </div>
                         </div>
                         <div class="overflow-x-auto">
@@ -296,8 +302,6 @@
             zoomResetBtn = document.getElementById('zoom-reset-btn');
             modeToggle = document.getElementById('modeToggle');
             gdtResultsContainer = document.getElementById('gdtResultsContainer');
-            downloadGdtDocxBtn = document.getElementById('download-gdt-docx-btn');
-
             // Initialize libraries and setup
             (async function initializeApp() {
                 try {
@@ -320,9 +324,6 @@
                     }
                     document.getElementById('download-pdf-btn')?.addEventListener('click', downloadPdfWithBalloons);
                     document.getElementById('download-docx-btn')?.addEventListener('click', downloadDocxReport);
-                    if (downloadGdtDocxBtn) {
-                        downloadGdtDocxBtn.addEventListener('click', downloadGdtDocxReport);
-                    }
                     document.getElementById('reset-labels-btn')?.addEventListener('click', () => {
                         if (confirm('Are you sure you want to reset all labels? This action cannot be undone.')) {
                             resetAllLabels();
@@ -330,7 +331,33 @@
                     });
 
                     // Setup mode toggle
-                    // Removed gdtResultsContainer toggle logic (merged section)
+                    if (modeToggle) {
+                        modeToggle.addEventListener('click', () => {
+                            isGdtMode = !isGdtMode;
+                            modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
+                            modeToggle.classList.toggle('gdt-mode');
+                            
+                            // Clear any existing highlights
+                            document.querySelectorAll('.gdt-highlight').forEach(h => h.remove());
+                            
+                            // Show/hide appropriate UI elements
+                            if (isGdtMode) {
+                                // Clear existing balloon data when switching to GD&T mode
+                                balloonData = [];
+                                document.querySelectorAll('.balloon').forEach(b => b.remove());
+                                if (reportTableBody) reportTableBody.innerHTML = '';
+                            } else {
+                                // Clear GD&T results when switching back to ballooning mode
+                                const gdtResultsBody = document.getElementById('gdtResultsBody');
+                                if (gdtResultsBody) gdtResultsBody.innerHTML = '';
+                            }
+                            
+                            // Update cursor style on viewer
+                            if (viewer) {
+                                viewer.style.cursor = isGdtMode ? 'crosshair' : 'default';
+                            }
+                        });
+                    }
 
                     // Setup zoom controls
                     if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => changePdfScale(-0.25));
@@ -826,6 +853,89 @@
                     resultsSection.classList.add('hidden');
                     placeholderText.classList.remove('hidden');
                 }
+            }
+        }
+
+        // Combined report generation function
+        async function downloadDocxReport() {
+            // Get balloon data if available
+            const hasBalloonData = balloonData.length > 0;
+            
+            // Get GD&T data if available
+            const gdtResultsBody = document.getElementById('gdtResultsBody');
+            const hasGdtResults = gdtResultsBody && gdtResultsBody.children.length > 0;
+            
+            if (!hasBalloonData && !hasGdtResults) {
+                showError("No data available. Add balloons or analyze GD&T features first.");
+                return;
+            }
+
+            // Prepare the combined report data
+            const reportData = {
+                header: {
+                    "Report Type": "Combined Inspection Report",
+                    "Source File": sourceFile?.name || "Untitled",
+                    "Generated Date": new Date().toLocaleString()
+                },
+                sections: []
+            };
+
+            // Add balloon data if available
+            if (hasBalloonData) {
+                reportData.sections.push({
+                    title: "Ballooned Items",
+                    table: {
+                        columns: ["No.", "Parameter", "Value"],
+                        rows: balloonData.map(d => [d.number, d.parameter, d.value])
+                    }
+                });
+            }
+
+            // Add GD&T data if available
+            if (hasGdtResults) {
+                const gdtRows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(tr => {
+                    const cells = tr.querySelectorAll('td');
+                    return Array.from(cells, cell => cell.textContent.trim());
+                });
+
+                reportData.sections.push({
+                    title: "GD&T Analysis Results",
+                    table: {
+                        columns: ["Characteristic", "Value", "Datums", "Modifiers"],
+                        rows: gdtRows
+                    }
+                });
+            }
+            
+            loaderText.textContent = 'Generating combined report...';
+            loader.classList.remove('hidden');
+            downloadDocxBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${backendUrlBase}/export-docx`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(reportData)
+                });
+                
+                if (!response.ok) throw new Error((await response.json()).error);
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'inspection_report.docx';
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                a.remove();
+            } catch (error) {
+                showError(`Could not generate report: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+                downloadDocxBtn.disabled = false;
             }
         }
 
