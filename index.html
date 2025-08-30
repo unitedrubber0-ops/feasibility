@@ -182,30 +182,9 @@
             Ballooning Mode
         </button>
 
-        <div class="grid md:grid-cols-2 gap-8">
-            <!-- Left Panel: Document Viewer -->
+        <div class="space-y-8">
+            <!-- Document Viewer (full width) -->
             <div>
-                <!-- GD&T Results Table -->
-                <div id="gdtResultsContainer" class="hidden mb-4">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold">GD&T Analysis Results</h3>
-                        <button id="download-gdt-docx-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">
-                            Download GD&T .docx
-                        </button>
-                    </div>
-                    <table class="gdt-results-table">
-                        <thead>
-                            <tr>
-                                <th>Characteristic</th>
-                                <th>Value</th>
-                                <th>Datums</th>
-                                <th>Modifiers</th>
-                            </tr>
-                        </thead>
-                        <tbody id="gdtResultsBody"></tbody>
-                    </table>
-                </div>
-                <!-- ... (Viewer HTML is the same, with zoom controls) ... -->
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold">Document Viewer</h2>
                     <div class="flex items-center space-x-4">
@@ -230,31 +209,43 @@
                 </div>
             </div>
 
-            <!-- Right Panel: Controls & Results -->
+            <!-- Results & Controls (below viewer) -->
             <div>
                 <h2 class="text-2xl font-bold mb-4">Inspection Data</h2>
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <div id="results-section" class="hidden">
-                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-xl font-semibold">Ballooned Items</h3>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-semibold">Results</h3>
                             <div>
-                                <button id="gdt-extract-btn" class="bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 mr-2">Extract GD&T Data</button>
                                 <button id="download-pdf-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 mr-2">Download PDF</button>
                                 <button id="download-docx-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download .docx</button>
+                                <button id="download-gdt-docx-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Download GD&T .docx</button>
                             </div>
                         </div>
                         <div class="overflow-x-auto">
-                            <table id="report-table" class="min-w-full divide-y divide-gray-200">
+                            <!-- Ballooned Items Table -->
+                            <table id="report-table" class="min-w-full divide-y divide-gray-200 mb-6">
                                 <thead class="bg-gray-50">
                                     <tr>
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">No.</th>
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">Parameter</th>
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">Value</th>
-                                        <!-- FEATURE 1: New Actions column -->
                                         <th class="px-4 py-2 text-left text-xs font-bold uppercase">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="report-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                            <!-- GD&T Results Table -->
+                            <table id="gdt-results-table" class="gdt-results-table min-w-full divide-y divide-gray-200">
+                                <thead>
+                                    <tr>
+                                        <th>Characteristic</th>
+                                        <th>Value</th>
+                                        <th>Datums</th>
+                                        <th>Modifiers</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gdtResultsBody"></tbody>
                             </table>
                         </div>
                     </div>
@@ -339,14 +330,7 @@
                     });
 
                     // Setup mode toggle
-                    if (modeToggle && gdtResultsContainer) {
-                        modeToggle.addEventListener('click', () => {
-                            isGdtMode = !isGdtMode;
-                            modeToggle.textContent = isGdtMode ? 'GD&T Analysis Mode' : 'Ballooning Mode';
-                            modeToggle.classList.toggle('gdt-mode', isGdtMode);
-                            gdtResultsContainer.classList.toggle('hidden', !isGdtMode);
-                        });
-                    }
+                    // Removed gdtResultsContainer toggle logic (merged section)
 
                     // Setup zoom controls
                     if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => changePdfScale(-0.25));
@@ -1039,7 +1023,7 @@
                 
                 const gdtResultsBody = document.getElementById('gdtResultsBody');
                 gdtResultsBody.appendChild(tr);
-                gdtResultsContainer.classList.remove('hidden');
+                // gdtResultsContainer.classList.remove('hidden');
 
             } catch (error) {
                 showError(`GD&T analysis failed: ${error.message}`);
