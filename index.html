@@ -710,8 +710,21 @@
                 return;
             }
 
-            const customLabel = prompt("Enter a label for this balloon:", clickedWord);
-            if (!customLabel) return;
+            // Check if the clicked word is numeric
+            const isNumeric = /^-?\d*\.?\d+$/.test(clickedWord.trim());
+            let parameter, value;
+
+            if (isNumeric) {
+                // If numeric, prompt for parameter name and use clicked word as value
+                parameter = prompt("This appears to be a measurement. What parameter does this measure?");
+                if (!parameter) return;
+                value = clickedWord;
+            } else {
+                // If not numeric, use clicked word as parameter name as before
+                parameter = clickedWord;
+                value = prompt("Enter a value for this parameter:", "");
+                if (!value) return;
+            }
 
             const balloonNumber = balloonCounter++;
             const canvas = event.target;
@@ -729,7 +742,7 @@
             });
 
             // Add balloon data to table with position info
-            addBalloonDataToTable(customLabel, balloonNumber, { 
+            addBalloonDataToTable(parameter, value, balloonNumber, { 
                 page: parseInt(canvas.dataset.pageNum, 10), 
                 x: relativeX, 
                 y: relativeY 
@@ -779,19 +792,16 @@
             return null;
         }
 
-        async function addBalloonDataToTable(label, number, position) {
-            loaderText.textContent = `Finding value for "${label}"...`;
+        async function addBalloonDataToTable(parameter, value, number, position) {
+            loaderText.textContent = 'Adding balloon...';
             loader.classList.remove('hidden');
 
-            const formData = new FormData();
-            formData.append('sourceFile', sourceFile);
-            formData.append('label', label);
-
             try {
-                const response = await fetch(`${backendUrlBase}/get-value-for-label`, { method: 'POST', body: formData });
-                if (!response.ok) throw new Error((await response.json()).error);
-                
-                const data = await response.json();
+                // Create data object directly since we have both parameter and value
+                const data = {
+                    parameter: parameter,
+                    value: value
+                };
                 
                 balloonData.push({ ...data, ...position, number });
                 
