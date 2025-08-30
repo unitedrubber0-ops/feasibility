@@ -158,17 +158,11 @@ def generate_report_handler():
         print(f"An error occurred during the AI process: {e}")
         return jsonify({"error": "Failed to generate report from AI model."}), 500
 
-# In main.py, replace the /analyze-gdt-at-point endpoint
-
-# In main.py, replace the /analyze-gdt-at-point endpoint
-
-# In main.py, replace the /analyze-gdt-at-point endpoint
-
 @app.route('/analyze-gdt-at-point', methods=['POST'])
 def analyze_gdt_at_point_handler():
     """
-    Analyzes a cropped section of a drawing page using a compartment-based
-    prompt for the highest possible GD&T accuracy.
+    Analyzes a full drawing page, focusing on the GD&T feature
+    closest to the provided X, Y coordinates, using a few-shot prompt.
     """
     if 'sourceFile' not in request.files or 'x' not in request.form or 'y' not in request.form or 'page_num' not in request.form:
         return jsonify({"error": "Missing source file or coordinate data"}), 400
@@ -187,12 +181,7 @@ def analyze_gdt_at_point_handler():
             return jsonify({"error": "Invalid page number"}), 400
             
         page = doc.load_page(page_num - 1)
-        
-        # Backend cropping logic
-        CROP_WIDTH = 400  # Slightly larger crop for more context
-        CROP_HEIGHT = 150
-        clip_box = fitz.Rect(x_coord - CROP_WIDTH / 2, y_coord - CROP_HEIGHT / 2, x_coord + CROP_WIDTH / 2, y_coord + CROP_HEIGHT / 2)
-        pix = page.get_pixmap(dpi=200, clip=clip_box)
+        pix = page.get_pixmap(dpi=200)
         
         img_buffer = io.BytesIO()
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -204,33 +193,80 @@ def analyze_gdt_at_point_handler():
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
         gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
 
-        # --- THE ULTIMATE "COMPARTMENT-BASED" PROMPT ---
+        # --- THE ULTIMATE PROMPT with FEW-SHOT LEARNING ---
         prompt = [
-            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) following the ASME Y14.5 standard. Your task is to parse a cropped image of a Feature Control Frame with absolute precision.",
-            "You must analyze the frame compartment by compartment from left to right.",
-            
-            "**PARSING RULES:**",
-            "1. **First Compartment:** Identify the geometric characteristic symbol. Your response for 'gdt_symbol_name' must be one of the standard names (e.g., 'Position', 'Profile of a Surface', 'Perpendicularity', 'Flatness').",
-            "2. **Second Compartment (Tolerance):** Extract the full tolerance value. Identify if a 'Ø' (diameter) symbol is present. Identify if a material condition modifier 'Ⓜ' (MMC) or 'Ⓛ' (LMC) is present.",
-            "3. **Third and Subsequent Compartments (Datums):** Identify the primary, secondary, and tertiary datums. For each datum, identify if it has its own material condition modifier.",
-            "4. **Final JSON Structure:** Return a single, raw JSON object. The object must have 'gdt_symbol_name', 'tolerance_value', 'diameter_symbol' (true/false), 'material_condition_modifier' (for the tolerance), and a list of 'datums'. Each object in the 'datums' list must have 'datum_letter' and 'datum_material_condition'.",
-            
-            "**EXAMPLE:** For an image showing `Position | Ø9 M | A M - B M | C`:",
-            """
+            "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) based on the ASME Y14.5 standard. You analyze GD&T Feature Control Frames with perfect accuracy using few-shot learning from these examples:",
+
+            "Example 1 - Position with MMC and Multiple Datums:",
+            """Given: Position | Ø0.6 M | A M | B | C
             {
               "gdt_symbol_name": "Position",
-              "tolerance_value": "9",
+              "tolerance_value": "0.6",
               "diameter_symbol": true,
               "material_condition_modifier": "MMC",
               "datums": [
                 { "datum_letter": "A", "datum_material_condition": "MMC" },
-                { "datum_letter": "B", "datum_material_condition": "MMC" },
+                { "datum_letter": "B", "datum_material_condition": null },
                 { "datum_letter": "C", "datum_material_condition": null }
               ]
-            }
-            """,
-            "CRITICAL: Do not infer any information from text or symbols outside the main rectangular frame. If a datum like 'B' or 'C' is not explicitly listed inside the frame, do not include it.",
-            "Now, analyze this image with extreme precision:",
+            }""",
+
+            "Example 2 - Perpendicularity with Single Datum:",
+            """Given: ⊥ | 0.2 | A
+            {
+              "gdt_symbol_name": "Perpendicularity",
+              "tolerance_value": "0.2",
+              "diameter_symbol": false,
+              "material_condition_modifier": null,
+              "datums": [
+                { "datum_letter": "A", "datum_material_condition": null }
+              ]
+            }""",
+
+            "Example 3 - Flatness with No Datums:",
+            """Given: ⎬ | 0.3
+            {
+              "gdt_symbol_name": "Flatness",
+              "tolerance_value": "0.3",
+              "diameter_symbol": false,
+              "material_condition_modifier": null,
+              "datums": []
+            }""",
+
+            "Example 4 - Orientation with LMC:",
+            """Given: ∠ | 0.4 L | A L
+            {
+              "gdt_symbol_name": "Angularity",
+              "tolerance_value": "0.4",
+              "diameter_symbol": false,
+              "material_condition_modifier": "LMC",
+              "datums": [
+                { "datum_letter": "A", "datum_material_condition": "LMC" }
+              ]
+            }""",
+            
+            # --- ENHANCED ACCURACY INSTRUCTIONS ---
+            "CRITICAL ACCURACY REQUIREMENTS:",
+            "1. Numbers must be EXACT - pay special attention to common confusions:",
+            "   - 6 vs 9: Analyze orientation - 6 opens up, 9 opens down",
+            "   - 3 vs 8: Look for continuous curves (8) vs distinct gaps (3)",
+            "   - 1 vs 7: Check for baseline serif (1) vs angled stroke (7)",
+            "   - 0 vs 6/9: Look for complete roundness (0) vs attached stem",
+            "2. Double-check numerical values using feature frame context and typical ranges:",
+            "   - Position: Usually 0.2 to 2.0 for metric",
+            "   - Flatness: Typically 0.1 to 0.5",
+            "   - Surface Profile: Generally 0.1 to 1.0",
+            "3. Material condition modifiers must be exact:",
+            "   - MMC (Maximum Material Condition): When you see M",
+            "   - LMC (Least Material Condition): When you see L",
+            "   - null: When no modifier is shown",
+            "4. Check datum reference frame carefully:",
+            "   - Only include datums explicitly shown",
+            "   - Match modifiers exactly as shown (M, L, or none)",
+            "   - Preserve datum order (primary|secondary|tertiary)",
+
+            f"Now, analyze this image focusing on the GD&T frame nearest to coordinates (x={int(x_coord)}, y={int(y_coord)}). Parse it with extreme precision following the examples above. Return a single JSON object. If no valid frame is found near the click, return an empty object `{{}}`.",
+            
             gdt_image,
         ]
         
@@ -241,9 +277,9 @@ def analyze_gdt_at_point_handler():
         return jsonify(response_json)
 
     except Exception as e:
-        print(f"An error occurred during final GD&T analysis: {e}")
+        print(f"An error occurred during context-aware GD&T analysis: {e}")
         return jsonify({"error": f"Failed to analyze GD&T feature: {str(e)}"}), 500
-          
+
 # --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])
 def export_docx_handler():
