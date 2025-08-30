@@ -748,7 +748,8 @@
 
             console.log('Creating balloon:', {
                 balloonNumber,
-                label: customLabel,
+                parameter,
+                value,
                 position: { relativeX, relativeY },
                 page: parseInt(canvas.dataset.pageNum, 10)
             });
@@ -833,7 +834,7 @@
                 repositionBalloons();
 
             } catch (error) {
-                showError(`Could not get data for "${label}": ${error.message}`);
+                showError(`Could not add balloon: ${error.message}`);
                 balloonCounter--; 
             } finally {
                 loader.classList.add('hidden');
