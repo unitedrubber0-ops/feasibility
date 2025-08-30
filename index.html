@@ -1053,8 +1053,12 @@
                 `;
                 
                 const gdtResultsBody = document.getElementById('gdtResultsBody');
-                if (gdtResultsBody) gdtResultsBody.appendChild(tr);
-                // gdtResultsContainer.classList.remove('hidden');
+                if (gdtResultsBody) {
+                    gdtResultsBody.appendChild(tr);
+                    // Show the results section immediately after adding GD&T result
+                    resultsSection.classList.remove('hidden');
+                    placeholderText.classList.add('hidden');
+                }
 
             } catch (error) {
                 showError(`GD&T analysis failed: ${error.message}`);
