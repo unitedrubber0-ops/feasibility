@@ -354,8 +354,18 @@
                         gdtResultsBody.addEventListener('click', handleTableClick);
                     }
 
-                    // Setup viewer click handler
+                    // Setup viewer click handler and zoom functionality
                     if (viewer) {
+                        // Add wheel event listener for Ctrl + scroll zoom
+                        viewer.addEventListener('wheel', (event) => {
+                            // Only handle zoom if Ctrl key is pressed
+                            if (event.ctrlKey) {
+                                event.preventDefault(); // Prevent default scroll
+                                const zoomChange = event.deltaY > 0 ? -0.25 : 0.25;
+                                changePdfScale(zoomChange);
+                            }
+                        });
+
                         viewer.addEventListener('click', async (event) => {
                             try {
                                 const canvas = event.target;
@@ -720,10 +730,12 @@
                 if (!parameter) return;
                 value = clickedWord;
             } else {
-                // If not numeric, use clicked word as parameter name as before
-                parameter = clickedWord;
-                value = prompt("Enter a value for this parameter:", "");
-                if (!value) return;
+                // If not numeric, use clicked word as parameter name (original behavior)
+                const customLabel = clickedWord;
+                if (!customLabel) return;
+                // Keep the original parameter name as the clicked word
+                parameter = customLabel;
+                value = '';  // No value needed for non-numeric text
             }
 
             const balloonNumber = balloonCounter++;
