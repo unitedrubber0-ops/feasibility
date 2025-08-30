@@ -720,20 +720,30 @@
                 return;
             }
 
-            // Check if the clicked word is numeric
-            const isNumeric = /^-?\d*\.?\d+$/.test(clickedWord.trim());
             let parameter, value;
 
-            if (isNumeric) {
-                // If numeric, prompt for parameter name and use clicked word as value
-                parameter = prompt("This appears to be a measurement. What parameter does this measure?");
-                if (!parameter) return;
-                value = clickedWord;
+            // Handle the case where clickedWord is an object (non-numeric text was clicked)
+            if (typeof clickedWord === 'object' && clickedWord !== null) {
+                parameter = clickedWord.text;
+                if (clickedWord.numericValue) {
+                    value = clickedWord.numericValue;
+                } else {
+                    // If no nearby numeric value was found, prompt for value
+                    value = prompt("Enter a value for " + clickedWord.text + ":");
+                    if (!value) return;
+                }
             } else {
-                // If not numeric, use clicked word as parameter name and prompt for value
-                parameter = clickedWord;
-                value = prompt("Enter a value for " + clickedWord + ":");
-                if (!value) return;
+                // Handle the case where clickedWord is a string (numeric text was clicked)
+                const isNumeric = /^-?\d*\.?\d+$/.test(clickedWord.trim());
+                if (isNumeric) {
+                    parameter = prompt("This appears to be a measurement. What parameter does this measure?");
+                    if (!parameter) return;
+                    value = clickedWord;
+                } else {
+                    parameter = clickedWord;
+                    value = prompt("Enter a value for " + clickedWord + ":");
+                    if (!value) return;
+                }
             }
 
             const balloonNumber = balloonCounter++;
@@ -788,19 +798,67 @@
 
             // Add tolerance for click detection (10 pixels)
             const tolerance = 10 * (pageOcrData.width / targetCanvas.width);
+            // Add larger tolerance for searching nearby numbers (50 pixels)
+            const nearbyTolerance = 50 * (pageOcrData.width / targetCanvas.width);
 
+            let clickedWord = null;
+            let clickedWordBBox = null;
+
+            // First, find the clicked word
             for (const word of pageOcrData.words) {
                 const [x0, y0, x1, y1] = word.bbox;
-                // Add tolerance to the bounding box check
                 if (clickX >= (x0 - tolerance) && 
                     clickX <= (x1 + tolerance) && 
                     clickY >= (y0 - tolerance) && 
                     clickY <= (y1 + tolerance)) {
-                    console.log('Found word:', word.text, 'at bbox:', word.bbox);
-                    return word.text;
+                    clickedWord = word;
+                    clickedWordBBox = word.bbox;
+                    break;
                 }
             }
-            return null;
+
+            if (!clickedWord) {
+                return null;
+            }
+
+            // If the clicked word is numeric, return it as is
+            if (/^-?\d*\.?\d+$/.test(clickedWord.text.trim())) {
+                return clickedWord.text;
+            }
+
+            // If non-numeric, search for nearby numeric values
+            const [wordX0, wordY0, wordX1, wordY1] = clickedWordBBox;
+            let nearestNumber = null;
+            let minDistance = Number.MAX_VALUE;
+
+            for (const word of pageOcrData.words) {
+                if (/^-?\d*\.?\d+$/.test(word.text.trim())) {
+                    const [x0, y0, x1, y1] = word.bbox;
+                    // Calculate center points
+                    const wordCenterX = (wordX0 + wordX1) / 2;
+                    const wordCenterY = (wordY0 + wordY1) / 2;
+                    const numCenterX = (x0 + x1) / 2;
+                    const numCenterY = (y0 + y1) / 2;
+                    
+                    // Calculate distance between centers
+                    const distance = Math.sqrt(
+                        Math.pow(wordCenterX - numCenterX, 2) + 
+                        Math.pow(wordCenterY - numCenterY, 2)
+                    );
+
+                    // Check if the number is within tolerance and closer than previous finds
+                    if (distance < nearbyTolerance && distance < minDistance) {
+                        minDistance = distance;
+                        nearestNumber = word.text;
+                    }
+                }
+            }
+
+            // Return an object with both the clicked word and its associated numeric value
+            return {
+                text: clickedWord.text,
+                numericValue: nearestNumber
+            };
         }
 
         async function addBalloonDataToTable(parameter, value, number, position) {
