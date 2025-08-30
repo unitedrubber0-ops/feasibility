@@ -242,6 +242,7 @@
                                         <th>Value</th>
                                         <th>Datums</th>
                                         <th>Modifiers</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="gdtResultsBody"></tbody>
@@ -815,21 +816,37 @@
 
         // --- FEATURE 4: NEW function to handle remove clicks ---
         function handleTableClick(event) {
+            // Remove balloon rows
             if (event.target.classList.contains('remove-balloon-btn')) {
                 const row = event.target.closest('tr');
                 const numberToRemove = parseInt(row.dataset.balloonNumber, 10);
-                
+
                 // 1. Remove from data array
                 balloonData = balloonData.filter(b => b.number !== numberToRemove);
-                
+
                 // 2. Remove from UI table
                 row.remove();
-                
+
                 // 3. Redraw the balloons on the viewer (this naturally removes the deleted one)
                 repositionBalloons();
-                
-                // 4. Hide results if no balloons are left
-                if (balloonData.length === 0) {
+
+                // 4. Hide results if no balloons and no gdt rows are left
+                const gdtRows = document.getElementById('gdtResultsBody')?.children.length || 0;
+                if (balloonData.length === 0 && gdtRows === 0) {
+                    resultsSection.classList.add('hidden');
+                    placeholderText.classList.remove('hidden');
+                }
+            }
+
+            // Remove GD&T rows
+            if (event.target.classList.contains('remove-gdt-btn')) {
+                const row = event.target.closest('tr');
+                row.remove();
+
+                // If both tables empty, hide results and show placeholder
+                const balloonRows = balloonData.length;
+                const gdtRows = document.getElementById('gdtResultsBody')?.children.length || 0;
+                if (balloonRows === 0 && gdtRows === 0) {
                     resultsSection.classList.add('hidden');
                     placeholderText.classList.remove('hidden');
                 }
@@ -893,8 +910,12 @@
                             GD&T Symbol: ${feature.gdt_symbol || 'None'}
                         </td>
                         <td class="px-4 py-3 text-center">—</td>
+                        <td class="px-4 py-3 text-center">
+                            <button class="remove-gdt-btn text-red-500 hover:text-red-700" title="Remove GD&T">&times;</button>
+                        </td>
                     `;
-                    reportTableBody.appendChild(tr);
+                    const gdtResultsBody = document.getElementById('gdtResultsBody');
+                    if (gdtResultsBody) gdtResultsBody.appendChild(tr);
                 });
             } else {
                 showError("No GD&T features were found in the drawing.");
@@ -1020,18 +1041,19 @@
                 // Create a formatted HTML result for the GD&T table
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${data.gdt_symbol_name}</td>
-                    <td>${data.diameter_symbol ? 'Ø' : ''}${data.tolerance_value}</td>
-                    <td>${data.datums.map(d => 
+                    <td class="px-4 py-3">${data.gdt_symbol_name}</td>
+                    <td class="px-4 py-3">${data.diameter_symbol ? 'Ø' : ''}${data.tolerance_value}</td>
+                    <td class="px-4 py-3">${data.datums.map(d => 
                         d.datum_material_condition ? 
                         `${d.datum_letter} (${d.datum_material_condition})` : 
                         d.datum_letter
                     ).join(' → ')}</td>
-                    <td>${data.material_condition_modifier || 'None'}</td>
+                    <td class="px-4 py-3">${data.material_condition_modifier || 'None'}</td>
+                    <td class="px-4 py-3 text-center"><button class="remove-gdt-btn text-red-500 hover:text-red-700" title="Remove GD&T">&times;</button></td>
                 `;
                 
                 const gdtResultsBody = document.getElementById('gdtResultsBody');
-                gdtResultsBody.appendChild(tr);
+                if (gdtResultsBody) gdtResultsBody.appendChild(tr);
                 // gdtResultsContainer.classList.remove('hidden');
 
             } catch (error) {
