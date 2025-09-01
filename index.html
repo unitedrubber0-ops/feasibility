@@ -1139,215 +1139,26 @@
 
         // Mode toggle is now handled in initializeApp()
 
+        // Single, consolidated DOCX export function (removes prior duplicates)
         async function downloadDocxReport() {
-            // Check if we have any data to export
-            let gdtRows = [];
+            // Collect GD&T rows (if any)
             const gdtResultsBody = document.getElementById('gdtResultsBody');
-            
-            if (gdtResultsBody) {
-                gdtRows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(row => {
-                    const cells = row.querySelectorAll('td');
-                    return {
-                        feature: cells[0]?.textContent?.trim() || '',
-                        parameter: cells[1]?.textContent?.trim() || '',
-                        details: cells[2]?.textContent?.trim() || ''
-                    };
-                }).filter(data => data.feature || data.parameter || data.details);
-            }
+            const gdtRows = gdtResultsBody
+                ? Array.from(gdtResultsBody.querySelectorAll('tr'))
+                      .map(row => {
+                          const cells = row.querySelectorAll('td');
+                          if (!cells || cells.length === 0) return null;
+                          return [
+                              cells[0]?.textContent?.trim() || '',
+                              cells[1]?.textContent?.trim() || '',
+                              cells[2]?.textContent?.trim() || '',
+                              cells[3]?.textContent?.trim() || ''
+                          ];
+                      })
+                      .filter(r => r !== null)
+                : [];
 
-            // Gather balloon rows from balloonData
-            const balloonRows = balloonData.map(d => ({
-                number: d.number,
-                parameter: d.parameter,
-                value: d.value
-            }));
-
-            if (balloonRows.length === 0 && gdtRows.length === 0) {
-                showError("No data to export. Please add some measurements first.");
-                return;
-            }
-
-            const reportData = {
-                type: "Combined Inspection Report",
-                sourceFile: sourceFile?.name || "Unknown",
-                generatedAt: new Date().toISOString(),
-                balloonData: balloonRows,
-                gdtData: gdtRows
-            };
-
-            loaderText.textContent = 'Generating DOCX file...';
-            loader.classList.remove('hidden');
-            downloadDocxBtn.disabled = true;
-
-            try {
-                const formData = new FormData();
-                formData.append('reportData', JSON.stringify(reportData));
-                
-                const response = await fetch(`${backendUrlBase}/generate-docx`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error((await response.json()).error);
-                }
-
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `inspection_report_${new Date().toISOString().split('T')[0]}.docx`;
-                document.body.appendChild(a);
-                a.click();
-                URL.revokeObjectURL(url);
-                a.remove();
-
-            } catch (error) {
-                showError(`Could not generate DOCX: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
-                downloadDocxBtn.disabled = false;
-            }
-        }
-            const gdtResultsBody = document.getElementById('gdtResultsBody');
-            if (gdtResultsBody) {
-                gdtRows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(row => {
-                    const cells = row.querySelectorAll('td');
-                    return {
-                        feature: cells[0]?.textContent?.trim() || '',
-                        parameter: cells[1]?.textContent?.trim() || '',
-                        details: cells[2]?.textContent?.trim() || ''
-                    };
-                }).filter(data => data.feature || data.parameter || data.details);
-            }
-
-            // Gather balloon rows from balloonData
-            const balloonRows = balloonData.map(d => ({
-                number: d.number,
-                parameter: d.parameter,
-                value: d.value
-            }));
-
-            if (balloonRows.length === 0 && gdtRows.length === 0) {
-                showError("No data to export. Please add some measurements first.");
-                return;
-            }
-
-            const reportData = {
-                type: "Combined Inspection Report",
-                sourceFile: sourceFile?.name || "Unknown",
-                generatedAt: new Date().toISOString(),
-                balloonData: balloonRows,
-                gdtData: gdtRows
-            };
-
-            loaderText.textContent = 'Generating DOCX file...';
-            loader.classList.remove('hidden');
-            downloadDocxBtn.disabled = true;
-
-            try {
-                const formData = new FormData();
-                formData.append('reportData', JSON.stringify(reportData));
-                
-                const response = await fetch(`${backendUrlBase}/generate-docx`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error((await response.json()).error);
-                }
-
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `inspection_report_${new Date().toISOString().split('T')[0]}.docx`;
-                document.body.appendChild(a);
-                a.click();
-                URL.revokeObjectURL(url);
-                a.remove();
-
-            } catch (error) {
-                showError(`Could not generate DOCX: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
-                downloadDocxBtn.disabled = false;
-            }
-                        parameter: cells[1]?.textContent?.trim() || '',
-                        details: cells[2]?.textContent?.trim() || ''
-                    };
-                }).filter(data => data.feature || data.parameter || data.details);
-            }
-
-            // Gather balloon rows from balloonData
-            const balloonRows = balloonData.map(d => ({
-                number: d.number,
-                parameter: d.parameter,
-                value: d.value
-            }));
-
-            if (balloonRows.length === 0 && gdtRows.length === 0) {
-                showError("No data to export. Please add some measurements first.");
-                return;
-            }
-
-            const reportData = {
-                type: "Combined Inspection Report",
-                sourceFile: sourceFile?.name || "Unknown",
-                generatedAt: new Date().toISOString(),
-                balloonData: balloonRows,
-                gdtData: gdtRows
-            };
-
-            loaderText.textContent = 'Generating DOCX file...';
-            loader.classList.remove('hidden');
-            downloadDocxBtn.disabled = true;
-
-            try {
-                const formData = new FormData();
-                formData.append('reportData', JSON.stringify(reportData));
-                
-                const response = await fetch(`${backendUrlBase}/generate-docx`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error((await response.json()).error);
-                }
-
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `inspection_report_${new Date().toISOString().split('T')[0]}.docx`;
-                document.body.appendChild(a);
-                a.click();
-                URL.revokeObjectURL(url);
-                a.remove();
-
-            } catch (error) {
-                showError(`Could not generate DOCX: ${error.message}`);
-            } finally {
-                loader.classList.add('hidden');
-                downloadDocxBtn.disabled = false;
-            }
-                        return [
-                            cells[0].textContent.trim(), // GD&T Symbol
-                            cells[1].textContent.trim(), // Tolerance Value
-                            cells[2].textContent.trim(), // Datums
-                            cells[3].textContent.trim()  // Material Condition
-                        ];
-                    });
-                } 
-                return gdtRows;
-            }
-                    return null;
-                }).filter(row => row !== null); // Remove any malformed rows
-            }
-
-            // Gather balloon rows from balloonData
+            // Collect balloon rows
             const balloonRows = balloonData.map(d => [d.number, d.parameter, d.value]);
 
             if (balloonRows.length === 0 && gdtRows.length === 0) {
@@ -1357,16 +1168,16 @@
 
             const reportData = {
                 header: {
-                    "Report Type": "Combined Inspection Report",
-                    "Source File": sourceFile ? sourceFile.name : '',
-                    "Generated At": new Date().toISOString()
+                    'Report Type': 'Combined Inspection Report',
+                    'Source File': sourceFile ? sourceFile.name : '',
+                    'Generated At': new Date().toISOString()
                 },
                 balloon_table: {
-                    columns: ["No.", "Parameter", "Value"],
+                    columns: ['No.', 'Parameter', 'Value'],
                     rows: balloonRows
                 },
                 gdt_table: {
-                    columns: ["Characteristic", "Value", "Datums", "Modifiers"],
+                    columns: ['Characteristic', 'Value', 'Datums', 'Modifiers'],
                     rows: gdtRows
                 }
             };
@@ -1379,15 +1190,19 @@
                 const response = await fetch(`${backendUrlBase}/export-docx`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(reportData),
+                    body: JSON.stringify(reportData)
                 });
-                if (!response.ok) throw new Error((await response.json()).error);
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || 'Server returned an error');
+                }
 
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'combined_report.docx';
+                a.download = `combined_report_${new Date().toISOString().split('T')[0]}.docx`;
                 document.body.appendChild(a);
                 a.click();
                 URL.revokeObjectURL(url);
