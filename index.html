@@ -1141,15 +1141,29 @@
 
         // Single, consolidated DOCX export function (removes prior duplicates)
         async function downloadDocxReport() {
-            // Collect GD&T rows (if any)
+            // Collect balloon data from the report table
+            const reportBody = document.getElementById('report-body');
+            const balloonRows = reportBody 
+                ? Array.from(reportBody.querySelectorAll('tr')).map(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length < 3) return null;
+                    // Get the balloon number from the balloon-table div
+                    const balloonNum = cells[0].querySelector('.balloon-table')?.textContent?.trim();
+                    return [
+                        balloonNum || '',
+                        cells[1]?.textContent?.trim() || '',
+                        cells[2]?.textContent?.trim() || ''
+                    ];
+                }).filter(row => row !== null)
+                : [];
+
+            // Collect GD&T rows
             const gdtResultsBody = document.getElementById('gdtResultsBody');
             const gdtRows = gdtResultsBody
                 ? Array.from(gdtResultsBody.querySelectorAll('tr'))
                       .map(row => {
                           const cells = row.querySelectorAll('td');
-                          if (!cells || cells.length === 0) {
-                              return null;
-                          }
+                          if (!cells || cells.length < 4) return null;
                           return [
                               cells[0]?.textContent?.trim() || '',
                               cells[1]?.textContent?.trim() || '',
@@ -1160,13 +1174,13 @@
                       .filter(r => r !== null)
                 : [];
 
-            // Collect balloon rows
-            const balloonRows = balloonData.map(d => [d.number, d.parameter, d.value]);
-
             if (balloonRows.length === 0 && gdtRows.length === 0) {
                 showError('No balloon or GD&T results to export.');
                 return;
             }
+
+            console.log('Balloon Rows:', balloonRows);
+            console.log('GD&T Rows:', gdtRows);
 
             const reportData = {
                 header: {
