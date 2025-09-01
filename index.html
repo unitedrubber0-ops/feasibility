@@ -1140,21 +1140,209 @@
         // Mode toggle is now handled in initializeApp()
 
         async function downloadDocxReport() {
-            // Gather GD&T table rows if present
-            const gdtResultsBody = document.getElementById('gdtResultsBody');
+            // Check if we have any data to export
             let gdtRows = [];
-            const gdtResultsTable = document.querySelector('#gdt-results-table tbody');
-            if (gdtResultsTable) {
-                gdtRows = Array.from(gdtResultsTable.querySelectorAll('tr')).map(row => {
-                    const cells = Array.from(row.querySelectorAll('td'));
-                    if (cells.length >= 4) {
+            const gdtResultsBody = document.getElementById('gdtResultsBody');
+            
+            if (gdtResultsBody) {
+                gdtRows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(row => {
+                    const cells = row.querySelectorAll('td');
+                    return {
+                        feature: cells[0]?.textContent?.trim() || '',
+                        parameter: cells[1]?.textContent?.trim() || '',
+                        details: cells[2]?.textContent?.trim() || ''
+                    };
+                }).filter(data => data.feature || data.parameter || data.details);
+            }
+
+            // Gather balloon rows from balloonData
+            const balloonRows = balloonData.map(d => ({
+                number: d.number,
+                parameter: d.parameter,
+                value: d.value
+            }));
+
+            if (balloonRows.length === 0 && gdtRows.length === 0) {
+                showError("No data to export. Please add some measurements first.");
+                return;
+            }
+
+            const reportData = {
+                type: "Combined Inspection Report",
+                sourceFile: sourceFile?.name || "Unknown",
+                generatedAt: new Date().toISOString(),
+                balloonData: balloonRows,
+                gdtData: gdtRows
+            };
+
+            loaderText.textContent = 'Generating DOCX file...';
+            loader.classList.remove('hidden');
+            downloadDocxBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('reportData', JSON.stringify(reportData));
+                
+                const response = await fetch(`${backendUrlBase}/generate-docx`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error((await response.json()).error);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `inspection_report_${new Date().toISOString().split('T')[0]}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                a.remove();
+
+            } catch (error) {
+                showError(`Could not generate DOCX: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+                downloadDocxBtn.disabled = false;
+            }
+        }
+            const gdtResultsBody = document.getElementById('gdtResultsBody');
+            if (gdtResultsBody) {
+                gdtRows = Array.from(gdtResultsBody.querySelectorAll('tr')).map(row => {
+                    const cells = row.querySelectorAll('td');
+                    return {
+                        feature: cells[0]?.textContent?.trim() || '',
+                        parameter: cells[1]?.textContent?.trim() || '',
+                        details: cells[2]?.textContent?.trim() || ''
+                    };
+                }).filter(data => data.feature || data.parameter || data.details);
+            }
+
+            // Gather balloon rows from balloonData
+            const balloonRows = balloonData.map(d => ({
+                number: d.number,
+                parameter: d.parameter,
+                value: d.value
+            }));
+
+            if (balloonRows.length === 0 && gdtRows.length === 0) {
+                showError("No data to export. Please add some measurements first.");
+                return;
+            }
+
+            const reportData = {
+                type: "Combined Inspection Report",
+                sourceFile: sourceFile?.name || "Unknown",
+                generatedAt: new Date().toISOString(),
+                balloonData: balloonRows,
+                gdtData: gdtRows
+            };
+
+            loaderText.textContent = 'Generating DOCX file...';
+            loader.classList.remove('hidden');
+            downloadDocxBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('reportData', JSON.stringify(reportData));
+                
+                const response = await fetch(`${backendUrlBase}/generate-docx`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error((await response.json()).error);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `inspection_report_${new Date().toISOString().split('T')[0]}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                a.remove();
+
+            } catch (error) {
+                showError(`Could not generate DOCX: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+                downloadDocxBtn.disabled = false;
+            }
+                        parameter: cells[1]?.textContent?.trim() || '',
+                        details: cells[2]?.textContent?.trim() || ''
+                    };
+                }).filter(data => data.feature || data.parameter || data.details);
+            }
+
+            // Gather balloon rows from balloonData
+            const balloonRows = balloonData.map(d => ({
+                number: d.number,
+                parameter: d.parameter,
+                value: d.value
+            }));
+
+            if (balloonRows.length === 0 && gdtRows.length === 0) {
+                showError("No data to export. Please add some measurements first.");
+                return;
+            }
+
+            const reportData = {
+                type: "Combined Inspection Report",
+                sourceFile: sourceFile?.name || "Unknown",
+                generatedAt: new Date().toISOString(),
+                balloonData: balloonRows,
+                gdtData: gdtRows
+            };
+
+            loaderText.textContent = 'Generating DOCX file...';
+            loader.classList.remove('hidden');
+            downloadDocxBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('reportData', JSON.stringify(reportData));
+                
+                const response = await fetch(`${backendUrlBase}/generate-docx`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error((await response.json()).error);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `inspection_report_${new Date().toISOString().split('T')[0]}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                a.remove();
+
+            } catch (error) {
+                showError(`Could not generate DOCX: ${error.message}`);
+            } finally {
+                loader.classList.add('hidden');
+                downloadDocxBtn.disabled = false;
+            }
                         return [
                             cells[0].textContent.trim(), // GD&T Symbol
                             cells[1].textContent.trim(), // Tolerance Value
                             cells[2].textContent.trim(), // Datums
                             cells[3].textContent.trim()  // Material Condition
                         ];
-                    }
+                    });
+                } 
+                return gdtRows;
+            }
                     return null;
                 }).filter(row => row !== null); // Remove any malformed rows
             }
