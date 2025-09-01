@@ -710,19 +710,8 @@
                 return;
             }
 
-            let label, value;
-            const isNumeric = /^-?\d*\.?\d+$/.test(clickedWord.trim());
-
-            if (isNumeric) {
-                // For numeric text, prompt for parameter name and use clicked text as value
-                label = prompt("Enter a parameter name for this measurement:", "");
-                if (!label) return;
-                value = clickedWord;
-            } else {
-                // For non-numeric text, use existing behavior
-                label = clickedWord;
-                value = null;
-            }
+            const customLabel = prompt("Enter a label for this balloon:", clickedWord);
+            if (!customLabel) return;
 
             const balloonNumber = balloonCounter++;
             const canvas = event.target;
@@ -799,19 +788,10 @@
             formData.append('label', label);
 
             try {
-                let data;
-                if (value) {
-                    // For numeric texts, use the clicked value directly
-                    data = {
-                        parameter: label,
-                        value: value
-                    };
-                } else {
-                    // For non-numeric texts, fetch the value from the server
-                    const response = await fetch(`${backendUrlBase}/get-value-for-label`, { method: 'POST', body: formData });
-                    if (!response.ok) throw new Error((await response.json()).error);
-                    data = await response.json();
-                }
+                const response = await fetch(`${backendUrlBase}/get-value-for-label`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error((await response.json()).error);
+                
+                const data = await response.json();
                 
                 balloonData.push({ ...data, ...position, number });
                 
