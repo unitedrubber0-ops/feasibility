@@ -1147,7 +1147,9 @@
                 ? Array.from(gdtResultsBody.querySelectorAll('tr'))
                       .map(row => {
                           const cells = row.querySelectorAll('td');
-                          if (!cells || cells.length === 0) return null;
+                          if (!cells || cells.length === 0) {
+                              return null;
+                          }
                           return [
                               cells[0]?.textContent?.trim() || '',
                               cells[1]?.textContent?.trim() || '',
