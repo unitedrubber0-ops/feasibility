@@ -720,8 +720,8 @@
                 // Check if the clicked word is a number (handles integers and decimals)
                 const isNumeric = !isNaN(parseFloat(clickedWord)) && isFinite(clickedWord);
                 
-                // Use the lowest available number or increment the counter
-                const balloonNumber = availableNumbers.length > 0 ? availableNumbers.shift() : balloonCounter++;
+                // Use the next available number
+                const balloonNumber = balloonCounter++;
                 const rect = canvas.getBoundingClientRect();
                 const position = {
                     page: parseInt(canvas.dataset.pageNum, 10),
