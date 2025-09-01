@@ -267,6 +267,7 @@
         let isGdtMode = false;
         let sourceFile = null;
         let balloonCounter = 1;
+        let availableNumbers = [];  // Track available numbers for reuse
         let ocrData = null;
         let pdfDoc = null;
         let pdfScale = 1.5;
@@ -412,6 +413,7 @@
                 pdfDoc = null;
                 balloonData = [];
                 balloonCounter = 1;
+                availableNumbers = [];  // Reset available numbers
                 pdfScale = 1.5;  // Reset to default zoom level
                 isGdtMode = false;  // Reset to default mode
                 
@@ -720,7 +722,8 @@
                 // Check if the clicked word is a number (handles integers and decimals)
                 const isNumeric = !isNaN(parseFloat(clickedWord)) && isFinite(clickedWord);
                 
-                const balloonNumber = balloonCounter++;
+                // Use the lowest available number or increment the counter
+                const balloonNumber = availableNumbers.length > 0 ? availableNumbers.shift() : balloonCounter++;
                 const rect = canvas.getBoundingClientRect();
                 const position = {
                     page: parseInt(canvas.dataset.pageNum, 10),
@@ -863,17 +866,27 @@
                 // 1. Remove from data array
                 balloonData = balloonData.filter(b => b.number !== numberToRemove);
 
-                // 2. Remove from UI table
+                // 2. Add the removed number to available numbers
+                availableNumbers.push(numberToRemove);
+                // Sort available numbers for sequential reuse
+                availableNumbers.sort((a, b) => a - b);
+                
+                // 3. Update balloonCounter if needed
+                if (numberToRemove === balloonCounter - 1) {
+                    balloonCounter = numberToRemove;
+                }
+
+                // 4. Remove from UI table
                 row.remove();
 
-                // 3. Redraw the balloons on the viewer (this naturally removes the deleted one)
+                // 5. Redraw the balloons on the viewer
                 repositionBalloons();
 
-                // 4. Hide results if no balloons and no gdt rows are left
+                // 6. Hide results if no balloons and no gdt rows are left
                 const gdtRows = document.getElementById('gdtResultsBody')?.children.length || 0;
                 if (balloonData.length === 0 && gdtRows === 0) {
-                    resultsSection.classList.add('hidden');
-                    placeholderText.classList.remove('hidden');
+                    resultsSection.classList.remove('hidden');
+                    placeholderText.classList.add('hidden');
                 }
             }
 
