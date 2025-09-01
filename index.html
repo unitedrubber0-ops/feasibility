@@ -1111,10 +1111,22 @@
         async function downloadDocxReport() {
             // Gather GD&T table rows if present
             const gdtResultsBody = document.getElementById('gdtResultsBody');
-            const gdtRows = gdtResultsBody ? Array.from(gdtResultsBody.children).map(row => {
-                const cells = row.querySelectorAll('td');
-                return Array.from(cells, cell => cell.textContent.trim());
-            }) : [];
+            let gdtRows = [];
+            const gdtResultsTable = document.querySelector('#gdt-results-table tbody');
+            if (gdtResultsTable) {
+                gdtRows = Array.from(gdtResultsTable.querySelectorAll('tr')).map(row => {
+                    const cells = Array.from(row.querySelectorAll('td'));
+                    if (cells.length >= 4) {
+                        return [
+                            cells[0].textContent.trim(), // GD&T Symbol
+                            cells[1].textContent.trim(), // Tolerance Value
+                            cells[2].textContent.trim(), // Datums
+                            cells[3].textContent.trim()  // Material Condition
+                        ];
+                    }
+                    return null;
+                }).filter(row => row !== null); // Remove any malformed rows
+            }
 
             // Gather balloon rows from balloonData
             const balloonRows = balloonData.map(d => [d.number, d.parameter, d.value]);
