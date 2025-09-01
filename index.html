@@ -693,47 +693,61 @@
         }
 
         // ... (handleViewerClick and findWordAtClick are the same) ...
-        function handleViewerClick(event) {
-            if (!ocrData || !pdfDoc) return;
-            if (event.target.tagName !== 'CANVAS') return;
-
-            // Debug logs to track execution
-            console.log('Click detected on canvas');
-            console.log('OCR Data:', ocrData);
-
-            const clickedWord = findWordAtClick(event);
-            console.log('Clicked word:', clickedWord);
-
-            if (!clickedWord) {
-                console.log('No word found at click position');
-                showError('No text found at click position. Try clicking directly on text.');
-                return;
-            }
-
-            const customLabel = prompt("Enter a label for this balloon:", clickedWord);
-            if (!customLabel) return;
-
-            const balloonNumber = balloonCounter++;
-            const canvas = event.target;
-            const rect = canvas.getBoundingClientRect();
+        async function handleViewerClick(event) {
+            if (!ocrData || !pdfDoc || event.target.tagName !== 'CANVAS') return;
             
-            // Calculate relative coordinates
-            const relativeX = (event.clientX - rect.left) / canvas.width;
-            const relativeY = (event.clientY - rect.top) / canvas.height;
+            const canvas = event.target;
+            
+            if (isGdtMode) {
+                // --- GD&T Mode Logic (no changes here) ---
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                const pageNum = parseInt(canvas.dataset.pageNum, 10);
+                
+                const originalPage = ocrData.find(p => p.page === pageNum);
+                const clickX = x * (originalPage.width / canvas.width);
+                const clickY = y * (originalPage.height / canvas.height);
 
-            console.log('Creating balloon:', {
-                balloonNumber,
-                label: customLabel,
-                position: { relativeX, relativeY },
-                page: parseInt(canvas.dataset.pageNum, 10)
-            });
+                await analyzeGdtAtPoint(pageNum, clickX, clickY);
+                showGdtHighlight(x, y);
 
-            // Add balloon data to table with position info
-            addBalloonDataToTable(customLabel, balloonNumber, { 
-                page: parseInt(canvas.dataset.pageNum, 10), 
-                x: relativeX, 
-                y: relativeY 
-            });
+            } else {
+                // --- NEW, SMARTER BALLOONING MODE LOGIC ---
+                const clickedWord = findWordAtClick(event);
+                if (!clickedWord) return;
+
+                // Check if the clicked word is a number (handles integers and decimals)
+                const isNumeric = !isNaN(parseFloat(clickedWord)) && isFinite(clickedWord);
+                
+                const balloonNumber = balloonCounter++;
+                const rect = canvas.getBoundingClientRect();
+                const position = {
+                    page: parseInt(canvas.dataset.pageNum, 10),
+                    x: (event.clientX - rect.left) / canvas.width,
+                    y: (event.clientY - rect.top) / canvas.height
+                };
+
+                if (isNumeric) {
+                    // If it's a number, this is the VALUE. Prompt for the PARAMETER.
+                    const parameterName = prompt(`You clicked on the value "${clickedWord}".\nPlease enter the parameter name for this value:`);
+                    if (!parameterName) {
+                        balloonCounter--; // User cancelled, so decrement the counter
+                        return;
+                    }
+                    // Add to the table directly, bypassing the AI backend call
+                    addDirectBalloonData(parameterName, clickedWord, balloonNumber, position);
+                } else {
+                    // If it's text, this is the PARAMETER. Let the user confirm it.
+                    const customLabel = prompt("Enter a label for this balloon:", clickedWord);
+                    if (!customLabel) {
+                        balloonCounter--; // User cancelled
+                        return;
+                    }
+                    // Call the backend to find the associated value
+                    fetchValueFromAI(customLabel, balloonNumber, position);
+                }
+            }
         }
 
          function findWordAtClick(event) {
@@ -779,7 +793,36 @@
             return null;
         }
 
-        async function addBalloonDataToTable(label, number, position) {
+        // This function adds a row to the HTML table
+        function addBalloonRowToTable(data, number) {
+            const tr = document.createElement('tr');
+            tr.dataset.balloonNumber = number;
+            tr.innerHTML = `
+                <td class="px-4 py-3"><div class="balloon-table">${number}</div></td>
+                <td class="px-4 py-3 font-medium">${data.parameter}</td>
+                <td class="px-4 py-3">${data.value}</td>
+                <td class="px-4 py-3 text-center">
+                    <button class="remove-balloon-btn text-red-500 hover:text-red-700" title="Remove item">&times;</button>
+                </td>`;
+            reportTableBody.appendChild(tr);
+            resultsSection.classList.remove('hidden');
+            placeholderText.classList.add('hidden');
+        }
+
+        // This function adds a balloon directly without calling the backend for a value.
+        function addDirectBalloonData(parameter, value, number, position) {
+            // 1. Add to the central data store
+            balloonData.push({ parameter, value, ...position, number });
+            
+            // 2. Add the new row to the UI table
+            addBalloonRowToTable({ parameter, value }, number);
+            
+            // 3. Redraw all balloons on the viewer
+            repositionBalloons();
+        }
+
+        // This function handles the backend AI call
+        async function fetchValueFromAI(label, number, position) {
             loaderText.textContent = `Finding value for "${label}"...`;
             loader.classList.remove('hidden');
 
@@ -793,21 +836,13 @@
                 
                 const data = await response.json();
                 
+                // Add to central data store
                 balloonData.push({ ...data, ...position, number });
                 
-                const tr = document.createElement('tr');
-                // --- FEATURE 3: Add data-attribute to row and include remove button ---
-                tr.dataset.balloonNumber = number;
-                tr.innerHTML = `
-                    <td class="px-4 py-3"><div class="balloon-table">${number}</div></td>
-                    <td class="px-4 py-3 font-medium">${data.parameter}</td>
-                    <td class="px-4 py-3">${data.value}</td>
-                    <td class="px-4 py-3 text-center">
-                        <button class="remove-balloon-btn text-red-500 hover:text-red-700" title="Remove item">&times;</button>
-                    </td>`;
-                reportTableBody.appendChild(tr);
-                resultsSection.classList.remove('hidden');
-                placeholderText.classList.add('hidden');
+                // Add to UI table
+                addBalloonRowToTable(data, number);
+                
+                // Redraw balloons
                 repositionBalloons();
 
             } catch (error) {
