@@ -247,45 +247,43 @@ def export_docx_handler():
         document = docx.Document()
         document.add_heading('Inspection Report', level=1)
 
-        # Add header info
+        # Header section
         if data.get("header"):
             for key, value in data["header"].items():
                 document.add_paragraph(f"{key}: {value}")
         document.add_paragraph()
 
-        # --- Balloon Table ---
-        if data.get("balloon_table"):
-            bt = data["balloon_table"]
-            if bt.get("columns") and bt.get("rows"):
-                document.add_heading("Ballooned Parameters", level=2)
-                table = document.add_table(rows=1, cols=len(bt["columns"]))
-                table.style = "Table Grid"
-                hdr_cells = table.rows[0].cells
-                for i, col in enumerate(bt["columns"]):
-                    hdr_cells[i].text = col
-                for row in bt["rows"]:
-                    cells = table.add_row().cells
-                    for i, val in enumerate(row):
-                        cells[i].text = str(val)
-                document.add_paragraph()
+        # Balloon Table
+        balloon_table = data.get("balloon_table")
+        if balloon_table and balloon_table.get("columns") and balloon_table.get("rows"):
+            document.add_heading("Ballooned Parameters", level=2)
+            table = document.add_table(rows=1, cols=len(balloon_table["columns"]))
+            table.style = "Table Grid"
+            hdr_cells = table.rows[0].cells
+            for i, col_name in enumerate(balloon_table["columns"]):
+                hdr_cells[i].text = col_name
+            for row_data in balloon_table["rows"]:
+                row_cells = table.add_row().cells
+                for i, cell_text in enumerate(row_data):
+                    row_cells[i].text = str(cell_text)
+            document.add_paragraph()
 
-        # --- GD&T Table ---
-        if data.get("gdt_table"):
-            gt = data["gdt_table"]
-            if gt.get("columns") and gt.get("rows"):
-                document.add_heading("GD&T Features", level=2)
-                table = document.add_table(rows=1, cols=len(gt["columns"]))
-                table.style = "Table Grid"
-                hdr_cells = table.rows[0].cells
-                for i, col in enumerate(gt["columns"]):
-                    hdr_cells[i].text = col
-                for row in gt["rows"]:
-                    cells = table.add_row().cells
-                    for i, val in enumerate(row):
-                        cells[i].text = str(val)
-                document.add_paragraph()
+        # GD&T Table
+        gdt_table = data.get("gdt_table")
+        if gdt_table and gdt_table.get("columns") and gdt_table.get("rows"):
+            document.add_heading("GD&T Features", level=2)
+            table = document.add_table(rows=1, cols=len(gdt_table["columns"]))
+            table.style = "Table Grid"
+            hdr_cells = table.rows[0].cells
+            for i, col_name in enumerate(gdt_table["columns"]):
+                hdr_cells[i].text = col_name
+            for row_data in gdt_table["rows"]:
+                row_cells = table.add_row().cells
+                for i, cell_text in enumerate(row_data):
+                    row_cells[i].text = str(cell_text)
+            document.add_paragraph()
 
-        # Save and return DOCX
+        # Save and return
         file_stream = io.BytesIO()
         document.save(file_stream)
         file_stream.seek(0)
@@ -295,10 +293,10 @@ def export_docx_handler():
             download_name="combined_report.docx",
             mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-
     except Exception as e:
         print(f"Error creating DOCX file: {e}")
         return jsonify({"error": "Failed to create DOCX file"}), 500
+
 
 @app.route('/process-document-for-ocr', methods=['POST'])
 def process_document_for_ocr_handler():
