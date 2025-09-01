@@ -267,7 +267,6 @@
         let isGdtMode = false;
         let sourceFile = null;
         let balloonCounter = 1;
-        let availableNumbers = [];  // Track available numbers for reuse
         let ocrData = null;
         let pdfDoc = null;
         let pdfScale = 1.5;
@@ -413,7 +412,6 @@
                 pdfDoc = null;
                 balloonData = [];
                 balloonCounter = 1;
-                availableNumbers = [];  // Reset available numbers
                 pdfScale = 1.5;  // Reset to default zoom level
                 isGdtMode = false;  // Reset to default mode
                 
@@ -866,27 +864,38 @@
                 // 1. Remove from data array
                 balloonData = balloonData.filter(b => b.number !== numberToRemove);
 
-                // 2. Add the removed number to available numbers
-                availableNumbers.push(numberToRemove);
-                // Sort available numbers for sequential reuse
-                availableNumbers.sort((a, b) => a - b);
-                
-                // 3. Update balloonCounter if needed
-                if (numberToRemove === balloonCounter - 1) {
-                    balloonCounter = numberToRemove;
-                }
+                // 2. Renumber all remaining balloons
+                balloonData.sort((a, b) => a.number - b.number); // Sort by current numbers
+                balloonData.forEach((balloon, index) => {
+                    balloon.number = index + 1; // Reassign numbers sequentially
+                });
 
-                // 4. Remove from UI table
+                // 3. Update the UI table
+                const reportTableRows = reportTableBody.querySelectorAll('tr');
+                reportTableRows.forEach(row => {
+                    const balloonNum = parseInt(row.dataset.balloonNumber, 10);
+                    if (balloonNum > numberToRemove) {
+                        // Update the row's balloon number
+                        const newNumber = balloonNum - 1;
+                        row.dataset.balloonNumber = newNumber;
+                        row.querySelector('.balloon-table').textContent = newNumber;
+                    }
+                });
+
+                // 4. Remove the clicked row
                 row.remove();
 
-                // 5. Redraw the balloons on the viewer
+                // 5. Update balloon counter
+                balloonCounter = balloonData.length + 1;
+
+                // 6. Redraw the balloons on the viewer
                 repositionBalloons();
 
-                // 6. Hide results if no balloons and no gdt rows are left
+                // 7. Hide results if no balloons and no gdt rows are left
                 const gdtRows = document.getElementById('gdtResultsBody')?.children.length || 0;
                 if (balloonData.length === 0 && gdtRows === 0) {
-                    resultsSection.classList.remove('hidden');
-                    placeholderText.classList.add('hidden');
+                    resultsSection.classList.add('hidden');
+                    placeholderText.classList.remove('hidden');
                 }
             }
 
