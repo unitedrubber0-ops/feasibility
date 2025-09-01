@@ -240,41 +240,62 @@ def analyze_gdt_at_point_handler():
         print(f"An error occurred during final GD&T analysis: {e}")
         return jsonify({"error": f"Failed to analyze GD&T feature: {str(e)}"}), 500
 
-# --- The /export-docx endpoint remains unchanged ---
 @app.route('/export-docx', methods=['POST'])
 def export_docx_handler():
-    # ... This function is correct and does not need to be changed ...
     data = request.get_json()
     try:
         document = docx.Document()
         document.add_heading('Inspection Report', level=1)
+
+        # Add header info
         if data.get("header"):
-            for key, value in data.get('header', {}).items():
+            for key, value in data["header"].items():
                 document.add_paragraph(f"{key}: {value}")
         document.add_paragraph()
-        if data.get("table"):
-            table_data = data.get('table', {})
-            columns = table_data.get('columns', [])
-            rows = table_data.get('rows', [])
-            if columns and rows:
-                table = document.add_table(rows=1, cols=len(columns))
-                table.style = 'Table Grid'
+
+        # --- Balloon Table ---
+        if data.get("balloon_table"):
+            bt = data["balloon_table"]
+            if bt.get("columns") and bt.get("rows"):
+                document.add_heading("Ballooned Parameters", level=2)
+                table = document.add_table(rows=1, cols=len(bt["columns"]))
+                table.style = "Table Grid"
                 hdr_cells = table.rows[0].cells
-                for i, col_name in enumerate(columns):
-                    hdr_cells[i].text = col_name
-                for row_data in rows:
-                    row_cells = table.add_row().cells
-                    for i, cell_text in enumerate(row_data):
-                        row_cells[i].text = str(cell_text)
+                for i, col in enumerate(bt["columns"]):
+                    hdr_cells[i].text = col
+                for row in bt["rows"]:
+                    cells = table.add_row().cells
+                    for i, val in enumerate(row):
+                        cells[i].text = str(val)
+                document.add_paragraph()
+
+        # --- GD&T Table ---
+        if data.get("gdt_table"):
+            gt = data["gdt_table"]
+            if gt.get("columns") and gt.get("rows"):
+                document.add_heading("GD&T Features", level=2)
+                table = document.add_table(rows=1, cols=len(gt["columns"]))
+                table.style = "Table Grid"
+                hdr_cells = table.rows[0].cells
+                for i, col in enumerate(gt["columns"]):
+                    hdr_cells[i].text = col
+                for row in gt["rows"]:
+                    cells = table.add_row().cells
+                    for i, val in enumerate(row):
+                        cells[i].text = str(val)
+                document.add_paragraph()
+
+        # Save and return DOCX
         file_stream = io.BytesIO()
         document.save(file_stream)
         file_stream.seek(0)
         return send_file(
             file_stream,
             as_attachment=True,
-            download_name='inspection_report.docx',
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            download_name="combined_report.docx",
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+
     except Exception as e:
         print(f"Error creating DOCX file: {e}")
         return jsonify({"error": "Failed to create DOCX file"}), 500
