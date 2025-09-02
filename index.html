@@ -97,14 +97,79 @@
     </script>
 
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        #viewer-container {
-            position: relative; background: #f3f4f6; border: 1px solid #d1d5db;
-            overflow: auto; height: 80vh;
+        /* Base styles */
+        body { 
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
         }
+        
+        /* Dark mode styles */
+        body.dark {
+            background-color: #1a1a1a !important;
+            color: #e5e5e5 !important;
+        }
+        
+        body.dark #viewer-container {
+            background: #2d2d2d;
+            border-color: #404040;
+        }
+
+        body.dark .bg-white {
+            background-color: #2d2d2d !important;
+            border-color: #404040 !important;
+        }
+
+        body.dark .text-gray-900 {
+            color: #e5e5e5 !important;
+        }
+
+        body.dark .text-gray-800 {
+            color: #d1d1d1 !important;
+        }
+
+        body.dark .text-gray-600 {
+            color: #9ca3af !important;
+        }
+
+        body.dark .border {
+            border-color: #404040 !important;
+        }
+
+        body.dark .shadow-sm {
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.5) !important;
+        }
+
+        body.dark table {
+            background-color: #2d2d2d !important;
+            border-color: #404040 !important;
+        }
+
+        body.dark th {
+            background-color: #363636 !important;
+            color: #e5e5e5 !important;
+        }
+
+        body.dark td {
+            border-color: #404040 !important;
+            color: #d1d1d1 !important;
+        }
+
+        /* Base container styles */
+        #viewer-container {
+            position: relative;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            overflow: auto;
+            height: 80vh;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        
         #viewer canvas {
-            display: block; margin: 0 auto 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: block;
+            margin: 0 auto 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             cursor: crosshair;
+            transition: box-shadow 0.3s;
         }
         .balloon {
             position: absolute;
@@ -199,6 +264,15 @@
                                 </svg>
                                 Rotate
                             </button>
+                            <button id="theme-toggle" class="px-3 py-1 bg-white border rounded-md shadow-sm flex items-center">
+                                <svg class="w-4 h-4 mr-1 dark-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" stroke-width="2"/>
+                                </svg>
+                                <svg class="w-4 h-4 mr-1 light-mode-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <circle cx="12" cy="12" r="4" stroke-width="2"/>
+                                </svg>
+                                Theme
                         </div>
                         <button id="reset-labels-btn" class="px-4 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md shadow-sm hover:bg-red-100">
                             Reset Labels
@@ -278,6 +352,7 @@
         let pdfScale = 1.5;
         let balloonData = [];
         let pageRotation = 0; // 0, 90, 180, or 270 degrees
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
 
         // Initialize everything when DOM is ready
         // Initialize global variables for DOM elements
@@ -361,6 +436,35 @@
                         });
                     }
 
+                    // Setup dark mode
+                    const themeToggle = document.getElementById('theme-toggle');
+                    const darkModeIcon = document.querySelector('.dark-mode-icon');
+                    const lightModeIcon = document.querySelector('.light-mode-icon');
+
+                    function setDarkMode(enabled) {
+                        if (enabled) {
+                            document.body.classList.add('dark');
+                            darkModeIcon.classList.add('hidden');
+                            lightModeIcon.classList.remove('hidden');
+                        } else {
+                            document.body.classList.remove('dark');
+                            darkModeIcon.classList.remove('hidden');
+                            lightModeIcon.classList.add('hidden');
+                        }
+                        localStorage.setItem('darkMode', enabled);
+                        isDarkMode = enabled;
+                    }
+
+                    // Initialize dark mode from saved preference
+                    setDarkMode(isDarkMode);
+
+                    // Setup theme toggle
+                    if (themeToggle) {
+                        themeToggle.addEventListener('click', () => {
+                            setDarkMode(!isDarkMode);
+                        });
+                    }
+
                     // Setup click handlers for both tables
                     if (reportTableBody) {
                         reportTableBody.addEventListener('click', handleTableClick);
@@ -431,6 +535,7 @@
                 pdfScale = 1.5;  // Reset to default zoom level
                 isGdtMode = false;  // Reset to default mode
                 pageRotation = 0;  // Reset to default rotation
+                // Note: We don't reset isDarkMode as it's a user preference
                 
                 // 2. Reset UI elements
                 if (viewer) viewer.innerHTML = '';
