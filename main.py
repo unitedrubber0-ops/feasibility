@@ -198,17 +198,33 @@ def analyze_gdt_at_point_handler():
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
         gdt_image = {'mime_type': 'image/png', 'data': img_buffer.getvalue()}
 
-        # --- THE ULTIMATE PROMPT with SELF-CORRECTION ---
+        # --- THE ULTIMATE PROMPT with SELF-CORRECTION AND GD&T SYMBOL REFERENCE ---
         prompt = [
             "You are a world-class expert in Geometric Dimensioning and Tolerancing (GD&T) following the ASME Y14.5 standard. Your task is to parse a cropped image of a Feature Control Frame with absolute precision.",
             "You must analyze the frame compartment by compartment from left to right.",
+
+            "**GD&T SYMBOL REFERENCE:**",
+            "Here are all the standard GD&T symbols and their meanings:",
+            "- Straightness: ⃓ (straight vertical line)",
+            "- Flatness: ▱ (parallelogram)",
+            "- Circularity: ○ (circle)",
+            "- Cylindricity: ⌭ (cylinder)",
+            "- Line Profile: ⌒ (curved line)",
+            "- Surface Profile: ⌓ (curved surface)",
+            "- Angularity: ∠ (angle)",
+            "- Perpendicularity: ⟂ (perpendicular)",
+            "- Parallelism: ∥ (parallel)",
+            "- Position: ⌖ (crosshair)",
+            "- Concentricity: ⊕ (concentric circles)",
+            "- Symmetry: ⌯ (symmetry)",
+            "- Circular Runout: ↗ (arrow)",
+            "- Total Runout: ↗↗ (double arrow)",
             
             "**PARSING RULES:**",
-            "1. **First Compartment:** Identify the geometric characteristic symbol.",
+            "1. **First Compartment:** Identify the geometric characteristic symbol using the reference above.",
             "2. **Second Compartment (Tolerance):** Extract the full tolerance value. Identify if a 'Ø' (diameter) symbol is present and if a material condition modifier 'Ⓜ' (MMC) or 'Ⓛ' (LMC) is present.",
             "3. **Third and Subsequent Compartments (Datums):** Identify the primary, secondary, and tertiary datums. For each datum, identify its own material condition modifier.",
             
-            # --- NEW SELF-CORRECTION INSTRUCTION ---
             "CRITICAL: Double-check the numerical values. Tolerance values in this context are rarely small decimals like '0.9' when the number on the drawing is clearly '9'. Be careful to distinguish between periods and pixel noise.",
 
             "**EXAMPLE:** For an image showing `Position | Ø9 M | A M - B M | C`:",
