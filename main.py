@@ -209,7 +209,6 @@ def analyze_gdt_at_point_handler():
             "- Flatness: ▱ (parallelogram)",
             "- Circularity: ○ (circle)",
             "- Cylindricity: ⌭ (cylinder)",
-            "- Line Profile: ⌒ (curved line)",
             "- Surface Profile: ⌓ (curved surface)",
             "- Angularity: ∠ (angle)",
             "- Perpendicularity: ⟂ (perpendicular)",
@@ -224,6 +223,7 @@ def analyze_gdt_at_point_handler():
             "1. **First Compartment:** Identify the geometric characteristic symbol using the reference above.",
             "2. **Second Compartment (Tolerance):** Extract the full tolerance value. Identify if a 'Ø' (diameter) symbol is present and if a material condition modifier 'Ⓜ' (MMC) or 'Ⓛ' (LMC) is present.",
             "3. **Third and Subsequent Compartments (Datums):** Identify the primary, secondary, and tertiary datums. For each datum, identify its own material condition modifier.",
+            "4. **Special Case - Surface Profile:** Unlike other form controls, Surface Profile CAN have a material condition modifier. When the characteristic is Surface Profile, check for and include any material condition modifier in the main tolerance zone.",
             
             "CRITICAL: Double-check the numerical values. Tolerance values in this context are rarely small decimals like '0.9' when the number on the drawing is clearly '9'. Be careful to distinguish between periods and pixel noise.",
 
