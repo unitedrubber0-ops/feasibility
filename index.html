@@ -193,6 +193,12 @@
                             <span id="zoom-level" class="text-sm font-medium w-16 text-center">150%</span>
                             <button id="zoom-in-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">+</button>
                             <button id="zoom-reset-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm">Reset Zoom</button>
+                            <button id="rotate-btn" class="px-3 py-1 bg-white border rounded-md shadow-sm flex items-center">
+                                <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M4 16v4h4m12-4v4h-4M4 8V4h4m12 4V4h-4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Rotate
+                            </button>
                         </div>
                         <button id="reset-labels-btn" class="px-4 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md shadow-sm hover:bg-red-100">
                             Reset Labels
@@ -271,6 +277,7 @@
         let pdfDoc = null;
         let pdfScale = 1.5;
         let balloonData = [];
+        let pageRotation = 0; // 0, 90, 180, or 270 degrees
 
         // Initialize everything when DOM is ready
         // Initialize global variables for DOM elements
@@ -345,6 +352,15 @@
                     if (zoomInBtn) zoomInBtn.addEventListener('click', () => changePdfScale(0.25));
                     if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => changePdfScale(0, true));
 
+                    // Setup rotation control
+                    const rotateBtn = document.getElementById('rotate-btn');
+                    if (rotateBtn) {
+                        rotateBtn.addEventListener('click', () => {
+                            pageRotation = (pageRotation + 90) % 360;
+                            renderAllPdfPages(pdfScale);
+                        });
+                    }
+
                     // Setup click handlers for both tables
                     if (reportTableBody) {
                         reportTableBody.addEventListener('click', handleTableClick);
@@ -414,6 +430,7 @@
                 balloonCounter = 1;
                 pdfScale = 1.5;  // Reset to default zoom level
                 isGdtMode = false;  // Reset to default mode
+                pageRotation = 0;  // Reset to default rotation
                 
                 // 2. Reset UI elements
                 if (viewer) viewer.innerHTML = '';
@@ -594,12 +611,20 @@
             
             for (let i = 1; i <= pdfDoc.numPages; i++) {
                 const page = await pdfDoc.getPage(i);
-                const viewport = page.getViewport({ scale });
+                const viewport = page.getViewport({ scale, rotation: pageRotation });
                 const canvas = document.createElement('canvas');
                 canvas.dataset.pageNum = i;
                 const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
+                
+                // Set canvas dimensions based on viewport orientation
+                if (pageRotation === 90 || pageRotation === 270) {
+                    canvas.height = viewport.width;
+                    canvas.width = viewport.height;
+                } else {
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                }
+                
                 await page.render({ canvasContext: context, viewport: viewport }).promise;
                 viewer.appendChild(canvas);
             }
